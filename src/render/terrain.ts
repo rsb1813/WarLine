@@ -254,24 +254,8 @@ export class Terrain {
         }
       }
     }
-    // 4. 길
-    const roadCol = this.snowy && w.theme === 'snow' ? '#b9c1c7' : '#4b5156';
-    const roadEdge = this.snowy && w.theme === 'snow' ? 'rgba(120,128,134,0.5)' : 'rgba(30,32,34,0.35)';
-    for (const pass of [0, 1]) {
-      g.fillStyle = pass ? roadCol : roadEdge;
-      for (let y = cy0; y <= cy1; y++) for (let x = cx0; x <= cx1; x++) {
-        const i = y * w.cw + x;
-        if (w.t[i] !== ROAD) continue;
-        g.beginPath(); g.arc((x + 0.5) * CELL, (y + 0.5) * CELL, CELL * (pass ? 0.78 : 0.92), 0, 7); g.fill();
-      }
-    }
-    for (let y = cy0; y <= cy1; y++) for (let x = cx0; x <= cx1; x++) {
-      const i = y * w.cw + x;
-      if (w.t[i] !== ROAD) continue;
-      const h = hash(i);
-      if (h > 0.75) { g.fillStyle = 'rgba(0,0,0,0.12)'; g.beginPath(); g.ellipse((x + h) * CELL, (y + 0.5) * CELL, 8, 5, h * 6, 0, 7); g.fill(); }
-      if (w.gnd[i] === 3) { g.strokeStyle = 'rgba(200,200,190,0.18)'; g.lineWidth = 1; g.strokeRect(x * CELL + 1, y * CELL + 1, CELL - 2, CELL - 2); }
-    }
+    // 4. 길: 경로를 따라 부드러운 선으로
+    this.drawRoads(g, x0, y0);
     // 5. 건물 바닥과 그림자
     const blds = new Set<number>();
     for (let y = cy0; y <= cy1; y++) for (let x = cx0; x <= cx1; x++) { const bi = w.bld[y * w.cw + x]; if (bi >= 0) blds.add(bi); }
@@ -317,6 +301,71 @@ export class Terrain {
       this.drawDecor(g, d);
     }
     return c;
+  }
+
+  private smooth(pts: number[]): number[] {
+    if (pts.length <= 4) return pts;
+    // 계단 모양 경로를 이동 평균으로 펴고 점을 솎는다
+    const n = pts.length / 2;
+    const out: number[] = [];
+    for (let i = 0; i < n; i += 2) {
+      let sx = 0, sy = 0, c = 0;
+      for (let k = -3; k <= 3; k++) { const j = Math.max(0, Math.min(n - 1, i + k)); sx += pts[j * 2]; sy += pts[j * 2 + 1]; c++; }
+      out.push(i === 0 ? pts[0] : sx / c, i === 0 ? pts[1] : sy / c);
+    }
+    out.push(pts[pts.length - 2], pts[pts.length - 1]);
+    return out;
+  }
+
+  private roadCache: { pts: number[]; w: number; street: boolean; x0: number; y0: number; x1: number; y1: number }[] | null = null;
+
+  drawRoads(g: CanvasRenderingContext2D, x0: number, y0: number) {
+    if (!this.roadCache) {
+      this.roadCache = this.w.roads.map((r) => {
+        const pts = r.street ? r.pts : this.smooth(r.pts);
+        let a = Infinity, b = Infinity, c = -Infinity, d = -Infinity;
+        for (let i = 0; i < pts.length; i += 2) { a = Math.min(a, pts[i]); c = Math.max(c, pts[i]); b = Math.min(b, pts[i + 1]); d = Math.max(d, pts[i + 1]); }
+        return { pts, w: r.w, street: r.street, x0: a, y0: b, x1: c, y1: d };
+      });
+    }
+    const snow = this.w.theme === 'snow';
+    const pad = 80;
+    const list = this.roadCache.filter((r) => r.x1 > x0 - pad && r.x0 < x0 + CHUNK + pad && r.y1 > y0 - pad && r.y0 < y0 + CHUNK + pad);
+    const plazas = this.w.plazas.filter((p) => p.x + p.r > x0 - pad && p.x - p.r < x0 + CHUNK + pad && p.y + p.r > y0 - pad && p.y - p.r < y0 + CHUNK + pad);
+    const path = (r: { pts: number[] }) => {
+      g.beginPath();
+      const p = r.pts;
+      g.moveTo(p[0], p[1]);
+      if (p.length <= 4) { g.lineTo(p[2], p[3]); return; }
+      for (let i = 2; i < p.length - 2; i += 2) g.quadraticCurveTo(p[i], p[i + 1], (p[i] + p[i + 2]) / 2, (p[i + 1] + p[i + 3]) / 2);
+      g.lineTo(p[p.length - 2], p[p.length - 1]);
+    };
+    g.lineCap = 'round'; g.lineJoin = 'round';
+    const layers: [string, number][] = snow
+      ? [['rgba(120,128,134,0.25)', 1.5], ['#c6ccd1', 1.0]]
+      : [['rgba(120,116,104,0.55)', 1.45], ['#585e63', 1.0]];
+    for (const [col, k] of layers) {
+      g.strokeStyle = col; g.fillStyle = col;
+      for (const r of list) { g.lineWidth = r.w * CELL * k; path(r); g.stroke(); }
+      for (const p of plazas) { g.beginPath(); g.arc(p.x, p.y, p.r * (k > 1 ? 1.12 : 1), 0, 7); g.fill(); }
+    }
+    // 바퀴 자국과 차선
+    g.setLineDash(snow ? [] : [18, 22]);
+    for (const r of list) {
+      if (snow) {
+        g.strokeStyle = 'rgba(140,150,158,0.5)'; g.lineWidth = 4;
+        for (const off of [-0.22, 0.22]) {
+          g.save(); g.translate(off * r.w * CELL * 0.6, off * r.w * CELL * 0.6); path(r); g.stroke(); g.restore();
+        }
+      } else if (!r.street) {
+        g.strokeStyle = 'rgba(225,215,170,0.35)'; g.lineWidth = 2; path(r); g.stroke();
+      }
+    }
+    g.setLineDash([]);
+    if (!snow) {
+      g.strokeStyle = 'rgba(30,32,34,0.18)'; g.lineWidth = 7;
+      for (const r of list) { g.save(); g.translate(5, 0); path(r); g.stroke(); g.restore(); }
+    }
   }
 
   private sameWall(i: number, b: number) {
@@ -372,16 +421,18 @@ export class Terrain {
       case RUBBLE: {
         const m = w.mat[i];
         const [base, top, edge] = WALL_COL[m] ?? WALL_COL[0];
-        g.fillStyle = 'rgba(60,56,52,0.45)';
-        g.beginPath(); g.arc(px + 16, py + 16, 18, 0, 7); g.fill();
-        for (let k = 0; k < 7; k++) {
+        g.fillStyle = 'rgba(58,54,50,0.35)';
+        g.beginPath(); g.ellipse(px + 16, py + 16, 17, 15, h * 3, 0, 7); g.fill();
+        g.globalAlpha = 0.85;
+        for (let k = 0; k < 9; k++) {
           g.fillStyle = k % 3 === 0 ? top : k % 3 === 1 ? base : edge;
-          const cx = px + 4 + hash(i * 7 + k) * 24, cy = py + 4 + hash(i * 13 + k) * 24, r = 3 + hash(i + k * 5) * 5;
+          const cx = px + 3 + hash(i * 7 + k) * 26, cy = py + 3 + hash(i * 13 + k) * 26, r = 1.5 + hash(i + k * 5) * 3.2;
           g.beginPath();
-          for (let s = 0; s < 5; s++) { const a = s * 1.26 + k; g.lineTo(cx + Math.cos(a) * r * (0.7 + hash(i + s + k) * 0.5), cy + Math.sin(a) * r * (0.7 + hash(i * 3 + s) * 0.5)); }
+          for (let s2 = 0; s2 < 4; s2++) { const a = s2 * 1.57 + k; g.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r * 0.8); }
           g.closePath(); g.fill();
         }
-        if (m === M_WOOD) { g.strokeStyle = '#5a4532'; g.lineWidth = 2.5; g.beginPath(); g.moveTo(px + 4, py + 6 + h * 20); g.lineTo(px + 28, py + 26 - h * 18); g.stroke(); }
+        g.globalAlpha = 1;
+        if (m === M_WOOD && h > 0.4) { g.strokeStyle = '#4e3b2b'; g.lineWidth = 2.2; g.beginPath(); g.moveTo(px + 4, py + 6 + h * 20); g.lineTo(px + 28, py + 26 - h * 18); g.stroke(); }
         break;
       }
       case SANDBAG: {
@@ -603,8 +654,10 @@ export class Terrain {
       }
     }
     if (this.snowy) {
-      g.fillStyle = 'rgba(236,242,247,0.42)';
-      for (let k = 0; k < (b.w * b.h) / 3; k++) { g.beginPath(); g.arc(hash(b.id * 31 + k) * W, hash(b.id * 17 + k) * H, 4 + hash(k + b.id) * 8, 0, 7); g.fill(); }
+      g.fillStyle = 'rgba(236,242,247,0.22)';
+      g.fillRect(0, 0, W, H);
+      g.fillStyle = 'rgba(240,245,249,0.35)';
+      for (let k = 0; k < (b.w * b.h) / 4; k++) { g.beginPath(); g.ellipse(hash(b.id * 31 + k) * W, hash(b.id * 17 + k) * H, 3 + hash(k + b.id) * 5, 2 + hash(k * 3 + b.id) * 3, 0, 0, 7); g.fill(); }
     }
     g.strokeStyle = 'rgba(10,12,14,0.6)'; g.lineWidth = 2; g.strokeRect(1, 1, W - 2, H - 2);
     // 구멍

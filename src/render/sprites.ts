@@ -332,7 +332,8 @@ function puff(r: number, g0: string, g1: string): Sprite {
   return make(r * 2, r * 2, (g) => {
     const gr = g.createRadialGradient(0, 0, 0, 0, 0, r);
     gr.addColorStop(0, g0);
-    gr.addColorStop(0.55, g1);
+    gr.addColorStop(0.35, g1);
+    gr.addColorStop(0.75, g1.replace(/[\d.]+\)$/, (m) => `${(parseFloat(m) * 0.35).toFixed(3)})`));
     gr.addColorStop(1, 'rgba(0,0,0,0)');
     g.fillStyle = gr;
     g.beginPath(); g.arc(0, 0, r, 0, 7); g.fill();
@@ -370,12 +371,12 @@ export function buildSprites(snowy: boolean): Sprites {
     body, lying: [lyingBody(LOOKS[0]), lyingBody(LOOKS[1])], weapons, veh,
     pines: [1, 2, 3, 4].map((k) => pine(k * 17, snowy)),
     birches: [1, 2, 3].map((k) => birch(k * 31, snowy)),
-    smoke: puff(64, 'rgba(120,124,128,0.55)', 'rgba(110,114,118,0.3)'),
+    smoke: puff(64, 'rgba(178,184,190,0.5)', 'rgba(160,166,172,0.3)'),
     dust: puff(64, 'rgba(150,138,118,0.5)', 'rgba(140,128,110,0.25)'),
     glow: puff(64, 'rgba(255,240,200,0.95)', 'rgba(255,170,70,0.35)'),
     fire: puff(64, 'rgba(255,220,120,0.95)', 'rgba(240,90,30,0.55)'),
     snowPuff: puff(64, 'rgba(245,248,252,0.8)', 'rgba(235,240,246,0.4)'),
-    dark: puff(64, 'rgba(30,32,34,0.7)', 'rgba(30,32,34,0.35)'),
+    dark: puff(64, 'rgba(62,64,66,0.5)', 'rgba(70,72,74,0.25)'),
   };
 }
 

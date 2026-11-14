@@ -236,6 +236,9 @@ export function genWorld(def: MapDef, flip: boolean): World {
     return path;
   };
   const carveRoad = (path: number[], half = 1.6) => {
+    const pts: number[] = [];
+    for (const c of path) { const px = c % cw; pts.push((px + 0.5) * CELL, ((c - px) / cw + 0.5) * CELL); }
+    w.roads.push({ pts, w: half * 2 + 0.4, street: false });
     for (const c of path) {
       const px = c % cw, py = (c - px) / cw;
       disc(px, py, half + 0.6, (i, _x, _y, d) => {
@@ -383,12 +386,14 @@ export function genWorld(def: MapDef, flip: boolean): World {
   };
   const street = (x0: number, y0: number, x1: number, y1: number) => {
     const steps = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0));
+    w.roads.push({ pts: [(x0 + 0.5) * CELL, (y0 + 0.5) * CELL, (x1 + 0.5) * CELL, (y1 + 0.5) * CELL], w: 2.6, street: true });
     for (let s = 0; s <= steps; s++) {
       const x = Math.round(x0 + ((x1 - x0) * s) / steps), y = Math.round(y0 + ((y1 - y0) * s) / steps);
       disc(x, y, 1.3, (i) => { if (w.t[i] === GROUND) { set(i, ROAD); w.vis[i] |= 128; } if (lock[i] !== 3) lock[i] = 1; });
     }
   };
   const plaza = (fx: number, fy: number, r: number) => {
+    w.plazas.push({ x: (fx + 0.5) * CELL, y: (fy + 0.5) * CELL, r: (r + 0.4) * CELL });
     disc(fx, fy, r, (i) => { if (w.t[i] !== WATER && w.t[i] !== BRIDGE) { set(i, ROAD); w.gnd[i] = 3; } lock[i] = 1; });
   };
   const yard = (fx: number, fy: number, rx: number, ry: number) => {
@@ -573,7 +578,7 @@ export function genWorld(def: MapDef, flip: boolean): World {
     const steps = 30;
     for (let s = 0; s < steps; s++) {
       const a = (dir > 0 ? 0 : Math.PI) + ((s / (steps - 1)) - 0.5) * 2.4;
-      if (s % 5 === 2) continue;
+      if (s % 4 >= 2) continue;
       const x = Math.round(h.x + Math.cos(a) * 11), y = Math.round(h.y + Math.sin(a) * 11);
       if (inb(x, y) && w.t[I(x, y)] === GROUND) set(I(x, y), SANDBAG, 220);
     }

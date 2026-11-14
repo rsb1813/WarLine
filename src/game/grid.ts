@@ -77,6 +77,9 @@ export interface World {
   hq: { x: number; y: number }[];
   pads: Pad[];
   decor: Decor[];
+  /** 그림용 길: 월드 좌표 점 목록과 폭 (칸 단위) */
+  roads: { pts: number[]; w: number; street: boolean }[];
+  plazas: { x: number; y: number; r: number }[];
   smokes: Smoke[];
   /** 바뀐 칸 (지형 그림을 다시 굽는다) */
   changed: number[];
@@ -92,7 +95,7 @@ export function emptyWorld(def: MapDef): World {
     def, theme: def.theme, w: cw * CELL, h: ch * CELL, cw, ch,
     t: new Uint8Array(n), hp: new Int16Array(n), mat: new Uint8Array(n), vis: new Uint8Array(n), gnd: new Uint8Array(n),
     bld: new Int16Array(n).fill(-1), roof: new Uint8Array(n),
-    buildings: [], flags: [], hq: [], pads: [], decor: [], smokes: [], changed: [], opened: [], navDirty: false,
+    buildings: [], flags: [], hq: [], pads: [], decor: [], roads: [], plazas: [], smokes: [], changed: [], opened: [], navDirty: false,
   };
 }
 
