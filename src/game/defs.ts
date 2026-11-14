@@ -355,9 +355,9 @@ export const ALLY_SKILL = { react: 0.5, err: 0.1 };
 
 export interface SizeDef { name: string; team: number; tickets: number; vehicles: VehicleType[] }
 export const SIZES: Record<SizeId, SizeDef> = {
-  small: { name: '16 대 16', team: 16, tickets: 220, vehicles: ['tank', 'ifv', 'jeep', 'jeep'] },
+  small: { name: '16 대 16', team: 16, tickets: 250, vehicles: ['tank', 'ifv', 'jeep', 'jeep'] },
   medium: { name: '32 대 32', team: 32, tickets: 360, vehicles: ['tank', 'tank', 'ifv', 'jeep', 'jeep', 'heli'] },
-  large: { name: '64 대 64', team: 64, tickets: 560, vehicles: ['tank', 'tank', 'tank', 'ifv', 'ifv', 'jeep', 'jeep', 'jeep', 'heli', 'heli'] },
+  large: { name: '64 대 64', team: 64, tickets: 620, vehicles: ['tank', 'tank', 'tank', 'ifv', 'ifv', 'jeep', 'jeep', 'jeep', 'heli', 'heli'] },
 };
 
 // ───────── 전장 ─────────

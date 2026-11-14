@@ -242,7 +242,8 @@ export function damageCell(b: Battle, i: number, dmg: number) {
   const t = w.t[i];
   if (!BREAKABLE[t] || dmg <= 0) return;
   if (t === CONTAINER && w.vis[i] === 255) dmg *= 0.2;
-  w.hp[i] -= dmg;
+  // hp는 16비트라 큰 피해를 그대로 빼면 넘쳐서 다시 양수가 된다
+  w.hp[i] = Math.max(-1, w.hp[i] - dmg);
   if (w.hp[i] > 0) return;
   const cx = i % w.cw, cy = (i - cx) / w.cw;
   const x = (cx + 0.5) * CELL, y = (cy + 0.5) * CELL;
@@ -1041,8 +1042,9 @@ function updateFlags(b: Battle, dt: number) {
     b.bleedT = BLEED_EVERY;
     const c0 = b.flags.filter((f) => f.owner === 0).length, c1 = b.flags.filter((f) => f.owner === 1).length;
     const half = b.flags.length / 2;
-    if (c0 > c1 && c0 > half) b.tickets[1] = Math.max(0, b.tickets[1] - (c0 - c1));
-    else if (c1 > c0 && c1 > half) b.tickets[0] = Math.max(0, b.tickets[0] - (c1 - c0));
+    // 거점 차이만큼 깎되 한 번에 최대 3장: 한쪽이 휩쓸어도 반격할 틈은 남는다
+    if (c0 > c1 && c0 > half) b.tickets[1] = Math.max(0, b.tickets[1] - Math.min(3, c0 - c1));
+    else if (c1 > c0 && c1 > half) b.tickets[0] = Math.max(0, b.tickets[0] - Math.min(3, c1 - c0));
   }
 }
 

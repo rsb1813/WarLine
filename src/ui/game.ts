@@ -272,6 +272,11 @@ export class GameScreen {
     cam.x += (tx - cam.x) * k;
     cam.y += (ty - cam.y) * k;
     cam.z += (zoom - cam.z) * (1 - Math.pow(0.03, dt));
+    // 전장 바깥의 빈 공간이 화면에 들어오지 않게 가둔다 (가장자리는 살짝 보이게)
+    const w = b.world, m = 40;
+    const hw = this.r.cw / 2 / cam.z, hh = this.r.ch / 2 / cam.z;
+    cam.x = w.w + 2 * m > hw * 2 ? Math.min(w.w + m - hw, Math.max(hw - m, cam.x)) : w.w / 2;
+    cam.y = w.h + 2 * m > hh * 2 ? Math.min(w.h + m - hh, Math.max(hh - m, cam.y)) : w.h / 2;
     this.snd.lx = cam.x; this.snd.ly = cam.y;
   }
 

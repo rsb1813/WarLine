@@ -255,6 +255,9 @@ export class Terrain {
           g.fillStyle = gd === 4 ? 'rgba(150,146,134,0.5)' : 'rgba(60,52,40,0.4)';
           for (let k = 0; k < 4; k++) { g.beginPath(); g.arc(px + hash(i + k * 7) * 32, py + hash(i + k * 11) * 32, 1 + hash(i + k) * 1.5, 0, 7); g.fill(); }
         } else if (gd === 3) {
+          // 콘크리트는 가장자리가 번지지 않게 칸마다 또렷하게 깐다
+          g.fillStyle = this.lowColor(i, t);
+          g.fillRect(px, py, CELL, CELL);
           g.strokeStyle = 'rgba(80,84,86,0.35)'; g.lineWidth = 1;
           g.strokeRect(px + 0.5, py + 0.5, CELL - 1, CELL - 1);
         }
