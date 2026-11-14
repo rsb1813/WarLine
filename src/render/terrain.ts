@@ -133,6 +133,12 @@ export class Terrain {
     const k = ky * this.ncx + kx;
     let list = this.decals.get(k);
     if (!list) { list = []; this.decals.set(k, list); }
+    // 같은 자리에 자국이 겹겹이 쌓여 새까맣게 되지 않도록
+    if (d.k === 'scorch' || d.k === 'crater') {
+      let near = 0;
+      for (const o of list) if (o.k === d.k && Math.abs(o.x - d.x) < d.s * 0.7 && Math.abs(o.y - d.y) < d.s * 0.7) near++;
+      if (near >= 2) return;
+    }
     list.push(d);
     if (list.length > 220) list.splice(0, list.length - 220);
     // 이미 그려 둔 조각에는 바로 덧그린다 (가장자리에 걸치면 이웃 조각도)
@@ -164,21 +170,21 @@ export class Terrain {
       g.restore();
     } else if (d.k === 'crater') {
       const gr = g.createRadialGradient(d.x, d.y, 0, d.x, d.y, d.s);
-      gr.addColorStop(0, 'rgba(28,22,18,0.85)');
-      gr.addColorStop(0.55, 'rgba(48,38,30,0.6)');
-      gr.addColorStop(0.8, 'rgba(70,58,44,0.35)');
+      gr.addColorStop(0, 'rgba(34,28,22,0.7)');
+      gr.addColorStop(0.55, 'rgba(52,42,34,0.45)');
+      gr.addColorStop(0.8, 'rgba(70,58,44,0.25)');
       gr.addColorStop(1, 'rgba(70,58,44,0)');
       g.fillStyle = gr;
       g.beginPath(); g.arc(d.x, d.y, d.s, 0, 7); g.fill();
-      g.fillStyle = 'rgba(60,50,40,0.5)';
+      g.fillStyle = 'rgba(60,50,40,0.4)';
       for (let k = 0; k < 7; k++) {
         const a = d.a + k * 0.9, r = d.s * (0.8 + hash(k + d.x) * 0.5);
         g.beginPath(); g.arc(d.x + Math.cos(a) * r, d.y + Math.sin(a) * r, 1.5 + hash(k * 3 + d.y) * 2.5, 0, 7); g.fill();
       }
     } else if (d.k === 'scorch') {
       const gr = g.createRadialGradient(d.x, d.y, 0, d.x, d.y, d.s);
-      gr.addColorStop(0, 'rgba(15,14,13,0.75)');
-      gr.addColorStop(0.7, 'rgba(20,18,16,0.35)');
+      gr.addColorStop(0, 'rgba(20,18,16,0.42)');
+      gr.addColorStop(0.7, 'rgba(24,22,20,0.16)');
       gr.addColorStop(1, 'rgba(20,18,16,0)');
       g.fillStyle = gr;
       g.beginPath(); g.arc(d.x, d.y, d.s, 0, 7); g.fill();

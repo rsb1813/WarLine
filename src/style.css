@@ -288,17 +288,23 @@ kbd { font-family: var(--f-num); font-size: 12px; background: rgba(255, 255, 255
   .flags i { width: 19px; height: 19px; font-size: 13px; }
   .top { left: auto; right: var(--gr); transform: none; top: calc(44px + var(--gt)); align-items: flex-end; }
   .mini { width: 112px; height: 112px; }
-  .squad { top: calc(128px + var(--gt)); width: 140px; font-size: 11px; }
+  .squad { top: calc(128px + var(--gt)); width: 124px; font-size: 11px; }
+  .squad h5 { font-size: 12px; }
   .squad p { grid-template-columns: 16px minmax(0, 1fr); padding: 1px 4px; }
   .squad .mh, .squad p small { display: none; }
-  .feed { top: auto; bottom: calc(130px + var(--gb)); left: var(--gl); right: auto; justify-items: start; font-size: 11px; }
+  .feed { top: calc(236px + var(--gt)); left: var(--gl); right: auto; justify-items: start; font-size: 10.5px; max-width: 62vw; }
+  .feed p { padding: 1px 6px; }
+  .feed p:nth-child(n+4) { display: none; }
   .bl { width: 150px; }
   .br .slots { display: none; }
   .wpn b { font-size: 26px; }
   .center { font-size: 22px; top: 30%; }
-  .cap { top: calc(150px + var(--gt)); min-width: 180px; }
+  .cap { top: calc(112px + var(--gt)); left: auto; right: var(--gr); transform: none; min-width: 0; width: 168px; padding: 4px 10px; font-size: 12px; }
   .obj { display: none; }
   .pops { left: auto; right: var(--gr); top: 40%; }
+  .hint { left: var(--gl); transform: none; bottom: calc(72px + var(--gb)); max-width: 62%; font-size: 12px; text-align: left; }
+  .pad { bottom: calc(84px + var(--gb)); grid-template-columns: repeat(3, 56px); gap: 4px; }
+  .pad button { min-height: 42px; font-size: 12px; }
   .dep-body { grid-template-columns: minmax(0, 1fr); }
   .dep { height: auto; }
   .dep-map { min-height: 200px; }
@@ -307,6 +313,28 @@ kbd { font-family: var(--f-num); font-size: 12px; background: rgba(255, 255, 255
   .ebox h2 { font-size: 48px; }
   .att { grid-template-columns: minmax(0, 1fr); }
   .att-d { grid-column: 1; }
+}
+/* 가로로 눕힌 폰처럼 키가 낮은 화면 */
+@media (max-height: 520px) {
+  .mini { width: 104px; height: 104px; }
+  .squad { top: calc(120px + var(--gt)); width: 128px; font-size: 11px; }
+  .squad h5 { font-size: 12px; }
+  .squad p { grid-template-columns: 16px minmax(0, 1fr); padding: 1px 4px; }
+  .squad .mh, .squad p small { display: none; }
+  .feed { font-size: 11px; top: calc(44px + var(--gt)); }
+  .feed p { padding: 1px 6px; }
+  .feed p:nth-child(n+4) { display: none; }
+  .tk { font-size: 20px; }
+  .flags i { width: 19px; height: 19px; font-size: 13px; }
+  .cap { top: calc(56px + var(--gt)); min-width: 170px; padding: 3px 10px; font-size: 12px; }
+  .obj { display: none; }
+  .bl { width: 160px; }
+  .br .slots { display: none; }
+  .wpn b { font-size: 26px; }
+  .pad { bottom: calc(92px + var(--gb)); grid-template-columns: repeat(3, 60px); gap: 4px; }
+  .pad button { min-height: 40px; font-size: 12px; }
+  .center { font-size: 22px; top: 22%; }
+  .hint { bottom: auto; top: calc(86px + var(--gt)); font-size: 12px; max-width: 46%; }
 }
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }

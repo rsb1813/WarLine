@@ -74,6 +74,7 @@ export class GameScreen {
   private hintI = 0;
   private hintT = 6;
   private showBoard = false;
+  private boardT = 0;
   private showMap = false;
   private q = <T extends HTMLElement>(s: string) => this.el.querySelector(s) as T;
   private onVis = () => { this.last = performance.now(); if (document.hidden && !this.b.over && !this.paused) this.pause(); };
@@ -530,7 +531,7 @@ export class GameScreen {
     this.miniT -= dt;
     if (this.miniT <= 0) { this.miniT = 0.2; this.drawMini(); }
     if (this.showMap) this.drawBig();
-    if (this.showBoard) this.renderBoard();
+    if (this.showBoard) { this.boardT -= dt; if (this.boardT <= 0) this.renderBoard(); }
     // 엔진 소리
     this.snd.setEngine(pv ? pv.type : null, pv ? Math.abs(pv.spd) : 0);
     this.snd.setWind(0.03 + (this.b.world.theme === 'snow' ? 0.04 : 0));
@@ -757,7 +758,11 @@ export class GameScreen {
         <table><thead><tr><th></th><th>이름</th><th>점수</th><th>사살</th><th>전사</th><th>지원</th><th>소생</th></tr></thead><tbody>${list.slice(0, 64).map((s, i) =>
           `<tr class="${s === b.player ? 'me' : team === 0 && s.squad === b.player.squad ? 'sq' : ''}"><td>${i + 1}</td><td><span class="ci">${CLS_ICON[s.cls]}</span>${esc(s.name)}</td><td>${s.score}</td><td>${s.kills}</td><td>${s.deaths}</td><td>${s.assists}</td><td>${s.revives}</td></tr>`).join('')}</tbody></table></div>`;
     };
-    this.q('.board').innerHTML = `<div class="bbox"><header><h3>점수판</h3><button data-a="board">닫기</button></header><div class="bcols">${col(0)}${col(1)}</div></div>`;
+    // 껍데기는 한 번만 만들고 표만 1초마다 바꾼다 (누르는 중인 버튼과 스크롤이 날아가지 않게)
+    this.boardT = 1;
+    const box = this.q('.board');
+    if (!box.firstElementChild) box.innerHTML = `<div class="bbox"><header><h3>점수판</h3><button data-a="board">닫기</button></header><div class="bcols"></div></div>`;
+    box.querySelector('.bcols')!.innerHTML = col(0) + col(1);
   }
 
   // ───────── 끝 ─────────

@@ -20,6 +20,8 @@ export class Input {
   private off: (() => void)[] = [];
 
   constructor(el: HTMLElement) {
+    // 손가락이 주 입력인 기기라면 처음부터 터치 조작을 띄운다
+    this.touch = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
     const on = <K extends keyof WindowEventMap>(t: EventTarget, k: K, fn: (e: WindowEventMap[K]) => void, opt?: AddEventListenerOptions) => {
       t.addEventListener(k, fn as EventListener, opt);
       this.off.push(() => t.removeEventListener(k, fn as EventListener, opt));
