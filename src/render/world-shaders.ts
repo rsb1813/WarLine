@@ -160,7 +160,7 @@ roughnessFactor = clamp(mix(roughnessFactor * (0.8 + 0.4 * wlR) + wlG * 0.15, 0.
 metalnessFactor *= (1.0 - wlSnow) * (1.0 - wlG * uSecondMetal);`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
 #ifdef WL_BUMP
-  normal = wlPerturb(-vViewPosition, normal, vec2(dFdx(wlH), dFdy(wlH)) * uBump, faceDirection);
+  normal = wlPerturb(-vViewPosition, normal, vec2(dFdx(wlH), dFdy(wlH)) * uBump * (1.0 - smoothstep(25.0, 110.0, length(vViewPosition))), faceDirection);
 #endif`);
   };
   return m;
@@ -174,7 +174,7 @@ export function makeTerrainMaterial(sh: SharedUniforms): THREE.MeshStandardMater
   const uni = { uDetail: { value: terrainDetailTex() }, uBump: { value: 1.6 } };
   m.customProgramCacheKey = () => 'wl-terrain';
   m.onBeforeCompile = (s) => {
-    Object.assign(s.uniforms, uni, { uSparkle: sh.uSparkle });
+    Object.assign(s.uniforms, uni, { uSparkle: sh.uSparkle, uSnowAmt: sh.uSnowAmt });
     s.vertexShader = s.vertexShader
       .replace('#include <common>', `#include <common>
 attribute vec4 aGround;
@@ -184,7 +184,7 @@ vGround = aGround;
 vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
     s.fragmentShader = s.fragmentShader
       .replace('#include <common>', `#include <common>
-uniform sampler2D uDetail; uniform float uBump; uniform float uSparkle;
+uniform sampler2D uDetail; uniform float uBump; uniform float uSparkle; uniform float uSnowAmt;
 varying vec4 vGround; varying vec3 vWPos;
 float wlH = 0.5; float wlSnow = 0.0;
 ${PERTURB}`)
@@ -206,13 +206,16 @@ float wlMacro = wd2.g;
   diffuseColor.rgb *= wlGw.x * mSnow + wlGw.y * mVeg + wlGw.z * mHard + wlGw.w * mRough;
   float speck = wlGw.y * smoothstep(0.5 + wlMacro * 0.25, 0.64 + wlMacro * 0.25, wd1.r * 0.55 + mix(0.5, wd3.g, wlNear) * 0.45) * 0.75;
   diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.84, 0.88, 0.93), speck);
+  // 포장면·흙 위에 바람에 날린 눈 얼룩
+  float dust = (wlGw.z + wlGw.w) * uSnowAmt * smoothstep(0.42, 0.72, wlMacro * 0.55 + wd1.r * 0.3 + wd3.r * 0.15 * wlNear) * 0.7;
+  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.8, 0.84, 0.89), dust);
   wlH = wlGw.x * wd1.r * 0.3 + wlGw.y * (wd1.r * 0.5 + wd3.g * 0.5 * wlNear) + wlGw.z * (wd1.r * 0.2 - crack * 0.5) + wlGw.w * (wd3.b * 0.8 * wlNear + wd1.r * 0.3);
-  wlSnow = wlGw.x;
+  wlSnow = clamp(wlGw.x + dust * 0.6, 0.0, 1.0);
 }`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
 roughnessFactor = wlGw.x * (0.6 + 0.15 * wd1.r) + wlGw.y * 0.95 + wlGw.z * 0.84 + wlGw.w * 0.9;`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
-normal = wlPerturb(-vViewPosition, normal, vec2(dFdx(wlH), dFdy(wlH)) * uBump, faceDirection);
+normal = wlPerturb(-vViewPosition, normal, vec2(dFdx(wlH), dFdy(wlH)) * uBump * (1.0 - smoothstep(18.0, 75.0, wlDist)), faceDirection);
 {
   // 바람에 깎인 눈결 (해석적 기울기: 미분 블록 무늬 없음)
   float ph = dot(wlP, vec2(0.83, 0.56)) * 5.0 + wd1.g * 9.0 + wd2.r * 5.0;

@@ -38,12 +38,12 @@ interface Inp {
   c: number; eyeH: number; sf: number; mv: number; mx: number; mz: number; phase: number;
   sprint: number; ads: number; alert: number; pitch: number; kick: number; reload: number; throwW: number;
   hit: number; t: number; hold: Hold; shape: SG.GunShape; zs: number; slide: number; air: number;
-  limp: number; sign: number;
+  limp: number; sign: number; twist: number;
 }
 
 const I: Inp = {
   c: 0, eyeH: 1.62, sf: 0, mv: 0, mx: 0, mz: -1, phase: 0, sprint: 0, ads: 0, alert: 0, pitch: 0, kick: 0,
-  reload: -1, throwW: -1, hit: 0, t: 0, hold: Hold.Rifle, shape: 'rifle', zs: 1, slide: 0, air: 0, limp: 0, sign: 1,
+  reload: -1, throwW: -1, hit: 0, t: 0, hold: Hold.Rifle, shape: 'rifle', zs: 1, slide: 0, air: 0, limp: 0, sign: 1, twist: 0,
 };
 
 // ───────── 수학 임시값 ─────────
@@ -115,7 +115,7 @@ function armsAndGun(P: Float32Array, prone: boolean): void {
     // 편한 자세(총구 아래)
     if (pist) { _gp.set(0.1, -0.38, -0.22).add(_N); qe(_qG, -1.0, 0, 0); }
     else if (lau) { _gp.set(0.14, -0.3, -0.22).add(_N); qe(_qG, -0.6, 0.5, 0); }
-    else { qe(_q1, I.pitch * 0.3, 0, 0); rot(_q1, 0.12, -0.3, -0.27, _gp).add(_N); qe(_qG, -0.5 + I.pitch * 0.3, 0.3, 0); }
+    else { qe(_q1, I.pitch * 0.3, I.twist, 0); rot(_q1, 0.12, -0.3, -0.27, _gp).add(_N); qe(_qG, -0.5 + I.pitch * 0.3, 0.3 + I.twist, 0); }
     _gpR.copy(_gp); _qR.copy(_qG);
     // 허리 사격 / 경계
     if (pist) rot(_qAim, 0.06, -0.16, -0.4, _v4).add(_N);
@@ -133,7 +133,7 @@ function armsAndGun(P: Float32Array, prone: boolean): void {
     if (sp > 0.001) {
       const bounce = Math.abs(Math.cos(I.phase)) * 0.025 * mv;
       if (pist) { _v4.set(0.2, -0.42 + bounce, -0.08).add(_N); qe(_q2, -1.25, 0, 0); }
-      else { _v4.set(0.1, -0.3 + bounce, -0.2).add(_N); qe(_q2, -0.3, 0.95, 0.25); }
+      else { rot(qe(_q2, 0, I.twist, 0), 0.1, -0.3 + bounce, -0.2, _v4).add(_N); qe(_q2, -0.3, 0.95 + I.twist, 0.25); }
       _gp.lerp(_v4, sp); _qG.slerp(_q2, sp);
     }
     // 걷기 흔들림
@@ -163,7 +163,7 @@ function armsAndGun(P: Float32Array, prone: boolean): void {
     }
     sv(P, GP, _gp); sq(P, GQ, _qG);
     // 손
-    rot(_qG, 0, -0.005, 0.03, _hR).add(_gp);
+    rot(_qG, 0, -0.01, 0.0, _hR).add(_gp);
     if (pist) rot(_qG, -0.028, -0.035, 0.025, _hL).add(_gp);
     else rot(_qG, -0.005, G.ly, G.lz * I.zs, _hL).add(_gp);
     // 팔꿈치 방향
@@ -216,8 +216,8 @@ function armsAndGun(P: Float32Array, prone: boolean): void {
       else _hR.copy(_b).lerp(_c, ss((w - 0.62) / 0.38));
     }
   } else if (I.hold === Hold.Mounted) {
-    rot(_qAim, 0.14, -0.2, -0.42, _hR).add(_N);
-    rot(_qAim, -0.14, -0.2, -0.42, _hL).add(_N);
+    rot(_qAim, 0.12, -0.02, -0.27, _hR).add(_N);
+    rot(_qAim, -0.12, -0.02, -0.27, _hL).add(_N);
     _gp.copy(_hR); sv(P, GP, _gp); sq(P, GQ, _qAim);
     poleRx = 0.8; poleRy = -0.6; poleRz = 0.1; poleLx = -0.8; poleLy = -0.6; poleLz = 0.1;
   } else {
@@ -246,6 +246,7 @@ function poseUpright(P: Float32Array): void {
   const theta = -lean + I.pitch * 0.42 * (1 - sp * 0.8) + breath + I.kick * 0.03 + I.hit * 0.18;
   const twist = Math.sin(I.phase) * 0.12 * mv * (1 - aimAmt * 0.6);
   const blade = rifleLike ? -0.22 * aimAmt : 0;
+  I.twist = twist;
   qe(_qT, theta, twist + blade + tw, I.hit * 0.08 * Math.sin(I.t * 23));
   qe(_qP, -c * 0.2, -twist * 0.7 + blade * 0.5 + tw * 0.3, 0);
   const hp = clamp(I.pitch * 0.9, -1.1, 1.1) + I.hit * 0.2;
@@ -301,6 +302,7 @@ function poseUpright(P: Float32Array): void {
 }
 
 function poseProne(P: Float32Array): void {
+  I.twist = 0;
   const crawl = I.mv;
   const p = clamp(I.pitch, -0.4, 0.6);
   qe(_qB, -1.47 + p * 0.2, 0, Math.sin(I.phase) * 0.06 * crawl);
@@ -827,7 +829,8 @@ export class SoldierLayer {
       rot(_qT, sd * SEG.shoulderX, SEG.shoulderY, 0, _a).add(_pel);
       gv(P, k === 0 ? HL : HR, _b);
       gv(P, k === 0 ? EL : ER, _pole);
-      ik(_a, _b, _pole, SEG.upperArm, SEG.lowerArm, _mid, _end);
+      // 목표는 손바닥: 팔꿈치→손바닥 = 아래팔 + 손 절반
+      ik(_a, _b, _pole, SEG.upperArm + 0.01, SEG.lowerArm + 0.045, _mid, _end);
       _c.copy(_pole).negate();
       seg(this.uArm, _a, _mid, _c, ur, ug, ub);
       if (k === 0) {
@@ -835,8 +838,10 @@ export class SoldierLayer {
         _v2.copy(_a).lerp(_mid, 0.33);
         seg(this.band, _v2, _mid, _c, sc.band.r, sc.band.g, sc.band.b);
       }
+      _v3.subVectors(_end, _mid).normalize();
+      _end.copy(_mid).addScaledVector(_v3, SEG.lowerArm);
       seg(this.lArm, _mid, _end, _c, ur, ug, ub);
-      _v2.subVectors(_end, _mid).normalize().multiplyScalar(0.1).add(_end);
+      _v2.copy(_end).addScaledVector(_v3, 0.1);
       seg(this.hand, _end, _v2, _c, W.r, W.g, W.b);
     }
 

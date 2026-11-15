@@ -149,7 +149,7 @@ function buildMBT(W: number, H: number, L: number, mark: number, root: THREE.Gro
   gun.position.set(0, Ht * 0.45, -Lt * 0.45);
   tur.add(gun);
   const gb = new VB();
-  const Lb = L * 0.66;
+  const Lb = L * 0.5;
   gb.hull.box(0.78, 0.5, 0.5, 0, 0, -0.1, HL);
   gb.mech.cylZ(0.072, Lb, 0, 0, -(0.35 + Lb / 2), GM, 10);
   gb.hull.cylZ(0.09, Lb * 0.24, 0, 0, -(0.35 + Lb * 0.14), HW, 10);
@@ -325,7 +325,7 @@ function buildLTV(W: number, H: number, L: number, mark: number, root: THREE.Gro
   tb.glass.box(0.18, 0.1, 0.02, 0.18, 0.46, -0.53, 0xffffff, 0.12, 0, 0);
   finish(tb, tur, mats);
   const gun = new THREE.Group(); gun.name = 'gun';
-  gun.position.set(0, 0.4, -0.3);
+  gun.position.set(0, 0.38, -0.42);
   tur.add(gun);
   const gb = new VB();
   gb.mech.box(0.12, 0.14, 0.55, 0, 0, -0.1, GM);

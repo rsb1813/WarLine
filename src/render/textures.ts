@@ -380,7 +380,7 @@ function genPlate(): THREE.DataTexture {
     const near = 1 - sstep(0.02, 0.06, ds);
     const bx = fract(u * 20), by = fract(v * 20);
     const bolt = near * (1 - sstep(0.12, 0.2, Math.hypot(bx - 0.5, by - 0.5))) * (ds > 0.015 && ds < 0.04 ? 1 : 0);
-    const chip = clamp01(sstep(0.74, 0.8, tfbm(u, v, 16, 16, 5, 141)) * 0.8 + near * sstep(0.62, 0.72, tfbm(u, v, 24, 24, 3, 143)) * 0.7);
+    const chip = clamp01(sstep(0.76, 0.82, tfbm(u, v, 12, 12, 5, 141)) * 0.7 + near * sstep(0.7, 0.8, tfbm(u, v, 24, 24, 3, 143)) * 0.35);
     o[0] = 0.5 + (tfbm(u, v, 4, 4, 3, 145) - 0.5) * 0.1 - seam * 0.15 + bolt * 0.1;
     o[1] = chip;
     o[2] = sstep(0.55, 0.85, tfbm(u, v, 24, 2, 3, 147)) * 0.6;
@@ -626,9 +626,14 @@ export function roadTex(): THREE.CanvasTexture {
     }
     // 덧씌운 아스팔트 땜질
     for (let k = 0; k < 5; k++) {
-      g.fillStyle = `rgba(${34 + rnd(k + 90) * 10},${35 + rnd(k + 90) * 10},${38 + rnd(k + 90) * 10},0.55)`;
+      g.fillStyle = `rgba(${44 + rnd(k + 90) * 10},${45 + rnd(k + 90) * 10},${48 + rnd(k + 90) * 10},0.28)`;
       const w = 20 + rnd(k + 70) * 50, h = 20 + rnd(k + 80) * 60;
-      g.fillRect(W * (0.18 + rnd(k + 60) * 0.55), H * rnd(k + 50), w, h);
+      const x = W * (0.18 + rnd(k + 60) * 0.55), y = H * rnd(k + 50);
+      g.beginPath();
+      g.moveTo(x, y);
+      for (let s = 1; s < 7; s++) { const a = (s / 7) * Math.PI * 2; g.lineTo(x + w / 2 + Math.cos(a) * w * (0.4 + rnd(k * 9 + s) * 0.2), y + h / 2 + Math.sin(a) * h * (0.4 + rnd(k * 11 + s) * 0.2)); }
+      g.closePath();
+      g.fill();
     }
     return canvasTex(c);
   });

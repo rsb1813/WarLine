@@ -9,9 +9,9 @@ import { frameTex } from './textures';
 type ClassKey =
   | 'concrete' | 'brick' | 'woodwall' | 'metalwall' | 'floorwood' | 'floorconc'
   | 'roofmetal' | 'rooftar' | 'roofwood' | 'container' | 'sandbag' | 'crate' | 'metalprop'
-  | 'fencewood' | 'fencemetal' | 'hedge' | 'stone' | 'rock' | 'bush' | 'rubble' | 'glass' | 'frame';
+  | 'fencewood' | 'fencemetal' | 'hedge' | 'stone' | 'rock' | 'bush' | 'rubble' | 'glass' | 'frame' | 'tank' | 'pipe';
 
-type GeoKind = 'box' | 'blob' | 'chunk' | 'uvbox';
+type GeoKind = 'box' | 'blob' | 'chunk' | 'uvbox' | 'cyl';
 interface ClassDef { geo: GeoKind; mat: BoxMatOpts | 'glass' | 'frame'; cast: boolean; spare: number }
 
 const base = (o: Partial<BoxMatOpts> & Pick<BoxMatOpts, 'side' | 'top'>): BoxMatOpts => ({
@@ -44,6 +44,8 @@ const CLASSES: Record<ClassKey, ClassDef> = {
   rock: { geo: 'blob', mat: STONE, cast: true, spare: 8 },
   bush: { geo: 'blob', mat: FOLIAGE, cast: true, spare: 8 },
   rubble: { geo: 'chunk', mat: base({ side: 'rubble', top: 'rubble', sideTile: [1.5, 1.5], topTile: [1.5, 1.5], second: 0x6e4030, grime: 0x3a3632, grimeAmt: 0.5, rough: 0.95, bump: 1.8, snow: 0.35, drift: 0 }), cast: true, spare: 512 },
+  tank: { geo: 'cyl', mat: base({ side: 'plate', top: 'roofmetal', second: 0x5a4a3e, grime: 0x4a4038, grimeAmt: 0.6, rough: 0.55, metal: 0.35, bump: 0.8, snow: 1.1, drift: 0.6 }), cast: true, spare: 4 },
+  pipe: { geo: 'cyl', mat: base({ side: 'plate', top: 'plate', sideTile: [3, 3], topTile: [3, 3], second: 0x5e3a26, grime: 0x3e3630, grimeAmt: 0.5, rough: 0.5, metal: 0.5, bump: 0.6, snow: 1, drift: 0 }), cast: true, spare: 4 },
   glass: { geo: 'box', mat: 'glass', cast: false, spare: 16 },
   frame: { geo: 'uvbox', mat: 'frame', cast: false, spare: 16 },
 };
@@ -61,6 +63,12 @@ function classOf(b: Box): ClassKey | null {
     case 'floor': case 'stair': case 'bridge':
       return b.mat === 'wood' ? 'floorwood' : b.mat === 'metal' ? 'metalprop' : b.mat === 'brick' ? 'brick' : b.mat === 'glass' ? 'glass' : 'floorconc';
     default: break;
+  }
+  if (b.kind === 'prop' && b.mat === 'metal') {
+    const dx = b.max.x - b.min.x, dy = b.max.y - b.min.y, dz = b.max.z - b.min.z;
+    // 네모 바닥의 큰 금속 소품 = 저장 탱크, 가늘고 긴 것 = 배관
+    if (dx >= 1.5 && Math.abs(dx - dz) < dx * 0.06 && dy >= 0.4) return 'tank';
+    if (dy <= 1.3 && Math.max(dx, dz) >= 3 * Math.min(dx, dz) && Math.min(dx, dz) <= 1.4) return 'pipe';
   }
   switch (b.mat) {
     case 'glass': return 'glass';
@@ -103,6 +111,7 @@ function lumpGeometry(detail: number, rough: number, flatBottom: number, seed: n
 function makeGeometry(kind: GeoKind): THREE.BufferGeometry {
   if (kind === 'blob') return lumpGeometry(1, 0.55, 0.2, 3);
   if (kind === 'chunk') return lumpGeometry(0, 0.55, 0.15, 9);
+  if (kind === 'cyl') { const c = new THREE.CylinderGeometry(0.5, 0.5, 1, 22, 1); c.deleteAttribute('uv'); return c; }
   const g = new THREE.BoxGeometry(1, 1, 1);
   if (kind === 'box') g.deleteAttribute('uv');
   return g;
@@ -242,6 +251,19 @@ export class BoxLayer {
       return out;
     }
 
+    if (key === 'tank') {
+      const m = new THREE.Matrix4().makeScale(dx * 1.07, dy, dz * 1.07).setPosition(cx, cy, cz);
+      out.push({ key, m, c: col.multiplyScalar(0.92 + h1 * 0.12), base: ground, glow: 0 });
+      return out;
+    }
+    if (key === 'pipe') {
+      const alongX = dx > dz;
+      const d = Math.min(alongX ? dz : dx, dy) * 1.02;
+      this.tmpQ.setFromAxisAngle(this.tmpV.set(alongX ? 0 : 1, 0, alongX ? 1 : 0), Math.PI / 2);
+      const m = new THREE.Matrix4().compose(this.tmpV.set(cx, b.min.y + d / 2, cz), this.tmpQ, this.tmpS.set(d, alongX ? dx : dz, d));
+      out.push({ key, m, c: col.multiplyScalar(0.92 + h1 * 0.12), base: ground, glow: 0 });
+      return out;
+    }
     const c = col;
     if (key === 'container') c.lerp(new THREE.Color(0.25, 0.25, 0.25), 0.12);
     c.multiplyScalar(0.9 + h1 * 0.2);

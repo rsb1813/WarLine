@@ -103,8 +103,9 @@ export class WorldView {
     this.sh.uSnowCol.value.setHex(this.pal.snow);
 
     this.envRT?.dispose();
-    this.envRT = this.sky.makeEnv(this.renderer, this.pal);
-    const env = this.envRT.texture;
+    this.envRT = null;
+    try { this.envRT = this.sky.makeEnv(this.renderer, this.pal); } catch (e) { console.warn('env map 실패', e); }
+    const env = this.envRT ? this.envRT.texture : null;
 
     this.terrain = new TerrainLayer(w, this.sh, this.pal, env);
     const glow = w.def.time === 'dusk' ? 0.16 : w.def.time === 'overcast' ? 0.06 : 0.02;

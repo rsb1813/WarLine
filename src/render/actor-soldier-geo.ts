@@ -70,13 +70,16 @@ export function packGeo(kind: number): THREE.BufferGeometry {
     b.box(0.31, 0.05, 0.16, 0, 0.48, 0.25, lid);
     // 등에 멘 발사관 (오른쪽 엉덩이 → 왼쪽 어깨 위)
     const tube = 0xa8ad98;
-    b.add(new THREE.CylinderGeometry(0.058, 0.058, 1.02, 10), rotZ(0, 0.36, 0.37, 0.55), tube);
-    b.add(new THREE.CylinderGeometry(0.066, 0.066, 0.09, 10), rotZT(0.55, 0.36, 0.37, 0.47), shadeOf(tube));
-    b.add(new THREE.CylinderGeometry(0.066, 0.066, 0.09, 10), rotZT(0.55, 0.36, 0.37, -0.47), shadeOf(tube));
-    b.box(0.03, 0.08, 0.05, 0.04, 0.4, 0.43, dark);
+    // 배낭 오른쪽에 세워 묶은 발사관
+    const ta = 0.1, tc = Math.cos(ta) * 0.47, ts = Math.sin(ta) * 0.47;
+    b.add(new THREE.CylinderGeometry(0.058, 0.058, 0.98, 10), rotX(0.19, 0.42, 0.33, ta), tube);
+    b.add(new THREE.CylinderGeometry(0.066, 0.066, 0.09, 10), rotX(0.19, 0.42 + tc, 0.33 + ts, ta), shadeOf(tube));
+    b.add(new THREE.CylinderGeometry(0.066, 0.066, 0.09, 10), rotX(0.19, 0.42 - tc, 0.33 - ts, ta), shadeOf(tube));
+    b.box(0.05, 0.03, 0.03, 0.19, 0.6, 0.27, dark);
+    b.box(0.05, 0.03, 0.03, 0.19, 0.25, 0.3, dark);
     // 여분 로켓
-    b.cyl(0.045, 0.045, 0.3, 0.16, 0.26, 0.3, 0x8f927f, 0, 0, 0, 8);
-    b.cyl(0.02, 0.045, 0.08, 0.16, 0.45, 0.3, 0x5c5f52, 0, 0, 0, 8);
+    b.cyl(0.045, 0.045, 0.3, -0.17, 0.26, 0.3, 0x8f927f, 0, 0, 0, 8);
+    b.cyl(0.02, 0.045, 0.08, -0.17, 0.45, 0.3, 0x5c5f52, 0, 0, 0, 8);
   } else if (kind === 2) {
     b.box(0.36, 0.48, 0.2, 0, 0.3, 0.28, W);
     b.cyl(0.07, 0.07, 0.36, 0, 0.58, 0.27, lid, 0, 0, Math.PI / 2, 10);   // 위 침낭 말이
@@ -102,14 +105,6 @@ export function packGeo(kind: number): THREE.BufferGeometry {
 }
 
 function shadeOf(c: number): number { return ((c >> 1) & 0x7f7f7f) + 0x202020; }
-function rotZ(x: number, y: number, z: number, a: number): THREE.Matrix4 {
-  return new THREE.Matrix4().makeRotationZ(a).setPosition(x, y, z);
-}
-/** 기울인 원기둥의 한쪽 끝 */
-function rotZT(a: number, x: number, y: number, along: number): THREE.Matrix4 {
-  const m = new THREE.Matrix4().makeRotationZ(a);
-  return m.setPosition(x - Math.sin(a) * along, y + Math.cos(a) * along, 0.37);
-}
 function rotX(x: number, y: number, z: number, a: number): THREE.Matrix4 {
   return new THREE.Matrix4().makeRotationX(a).setPosition(x, y, z);
 }

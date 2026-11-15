@@ -8,7 +8,7 @@ import { rand } from '../sim/game';
 import { smokeBlocks } from '../sim/damage';
 import { seatAimDir, seatWorldPos } from '../sim/vehicles';
 import { eyePos, headCenter } from '../sim/body';
-import { angleDiff, clamp, damp, DEG, dirFrom, forwardXZ, pitchTo, rightXZ, wrapAngle, yawTo } from '../math';
+import { angleDiff, clamp, damp, DEG, dirFrom, forwardXZ, rightXZ, wrapAngle, yawTo } from '../math';
 import { cellOf, coverSpots, createNav, findCover, findPath, lineWalkable, nearestOpen, navFrame, cellX, cellZ } from './nav';
 import type { Nav } from './nav';
 
@@ -65,6 +65,8 @@ interface Mind {
   nadeT: number; uglT: number; spotT: number; bagT: number; ammoT: number; sensorT: number; droneT: number; stimT: number;
   beacon: boolean; mine: boolean; clay: boolean; coverPlaced: boolean;
   use: Use | null; pistolT: number; crouchUntil: number; spawnT: number; idx: number;
+  arrived: boolean; following: boolean; headAim: boolean; scanYaw: number; scanT: number; smoked: boolean;
+  vReactT: number; gunBurst: number; gunPause: number;
 }
 
 const rnd = (g: Game): number => rand(g);
@@ -91,6 +93,8 @@ function newMind(g: Game, s: Soldier): Mind {
     ammoT: g.time + 20 + rnd(g) * 20, sensorT: g.time + 15 + rnd(g) * 15, droneT: g.time + 25 + rnd(g) * 20, stimT: 0,
     beacon: false, mine: false, clay: false, coverPlaced: false,
     use: null, pistolT: 0, crouchUntil: 0, spawnT: g.time, idx: s.id,
+    arrived: false, following: false, headAim: false, scanYaw: s.yaw, scanT: 0, smoked: false,
+    vReactT: 0, gunBurst: 0, gunPause: 0,
   };
 }
 
@@ -128,7 +132,6 @@ function slotOf(s: Soldier, kinds: GadgetKind[], ready = true): number {
 }
 
 const vehDef = (v: Vehicle) => VEHICLES[v.type];
-const occupied = (v: Vehicle): boolean => { for (let i = 0; i < v.seats.length; i++) if (v.seats[i] >= 0) return true; return false; };
 const chestOf = (o: Soldier, out: Vec3): Vec3 => {
   out.x = o.pos.x; out.z = o.pos.z;
   out.y = o.state === 'down' || o.stance === 'prone' ? o.pos.y + 0.25 : o.pos.y + o.eyeH * 0.72;
@@ -380,6 +383,7 @@ function perceive(g: Game, s: Soldier, m: Mind): void {
     if (sc < bestS) { bestS = sc; best = o.id; bestD = d; headOnly = ho; }
   }
   // 차량
+  const prevV = m.visV;
   m.visV = -1; m.visVD = 1e9;
   const vmax = 300;
   for (const v of g.vehicles) {
@@ -394,6 +398,7 @@ function perceive(g: Game, s: Soldier, m: Mind): void {
   }
   // 표적 갱신
   const df = DIFFS[g.opts.diff] ?? DIFFS.normal;
+  if (m.visV >= 0 && m.visV !== prevV) m.vReactT = g.time + df.react * (1 + 0.6 * rnd(g));
   if (best >= 0) {
     const o = ss[best];
     if (best !== m.tgt || g.time - m.seenT > 2.5) {
@@ -401,6 +406,7 @@ function perceive(g: Game, s: Soldier, m: Mind): void {
       m.reactT = g.time + df.react * (0.75 + 0.6 * rnd(g)) + (bestD > 80 ? 0.15 : 0) + (s.blindT > 0 ? 0.4 : 0);
       const big = df.aimErr * DEG * 2.2;
       m.errY = m.errTY = gauss(g) * big; m.errP = m.errTP = gauss(g) * big * 0.5;
+      m.headAim = rnd(g) < (g.opts.diff === 'hard' ? 0.35 : g.opts.diff === 'normal' ? 0.1 : 0);
     }
     m.tgt = best; m.vis = true; m.seenT = g.time;
     targetPoint(g, o, headOnly, m.lk);
@@ -792,6 +798,599 @@ function classActs(g: Game, st: AIState, s: Soldier, m: Mind): void {
       m.mine = true;
       const k = slotOf(s, ['atmine']);
       if (k >= 0) { startUse(g, s, m, k, null, { pitch: fwdDown, dur: 2.5 }); return; }
+    }
+  }
+}
+
+// ───────────────────────── 판단 (생각할 때) ─────────────────────────
+
+function tryBoard(g: Game, st: AIState, s: Soldier, m: Mind): void {
+  const hq = g.world.hq[s.team];
+  if (hyp(s.pos.x - hq.x, s.pos.z - hq.z) > 90) return;
+  if (s.team === 0 && g.time < 6) return; // 사람이 먼저 고를 틈
+  const pl = g.soldiers[g.player];
+  let best: Vehicle | null = null, bd = 70;
+  for (const v of g.vehicles) {
+    if (!v.alive || v.team !== s.team) continue;
+    const def = vehDef(v);
+    if (!def) continue;
+    const d = hyp(v.pos.x - s.pos.x, v.pos.z - s.pos.z);
+    if (d > bd) continue;
+    const ot = occupantTeam(g, v);
+    if (ot >= 0 && ot !== s.team) continue;
+    const vm = vmind(st, g, v);
+    if (v.seats[0] < 0) {
+      if (vm.claimBy >= 0 && vm.claimBy !== s.id && vm.claimUntil > g.time) continue;
+      if (pl && pl.team === s.team && pl.state === 'alive' && pl.vehicle < 0 && hyp(pl.pos.x - v.pos.x, pl.pos.z - v.pos.z) < 35) continue;
+    } else {
+      // 운전수가 있으면 출발 전이고 무기 좌석이 비었을 때만
+      if (Math.abs(v.speed) > 1 || d > 35) continue;
+      let freeGun = false;
+      for (let i = 1; i < v.seats.length; i++) if (v.seats[i] < 0 && def.seats[i] && (def.seats[i].weapon || v.type === 'ltv' || v.type === 'ifv')) freeGun = true;
+      if (!freeGun) continue;
+    }
+    best = v; bd = d;
+  }
+  if (!best || rnd(g) > 0.6) return;
+  const vm = vmind(st, g, best);
+  if (best.seats[0] < 0) { vm.claimBy = s.id; vm.claimUntil = g.time + 25; }
+  m.task = 'board'; m.vehId = best.id; m.vehUntil = g.time + 25; m.hasHold = false;
+}
+
+function objectiveGoal(g: Game, st: AIState, s: Soldier, m: Mind): void {
+  const nav = st.nav;
+  const o = orderOf(g, st, s);
+  const f = g.flags[o.flag];
+  if (!f) { m.goalX = s.pos.x; m.goalZ = s.pos.z; m.task = 'hold'; return; }
+  const dF = hyp(f.pos.x - s.pos.x, f.pos.z - s.pos.z);
+  const size = g.world.size;
+  // 정찰병 셋 중 둘은 거점 뒤 40~80m 에서 지원
+  if (s.cls === 'recon' && m.idx % 3 !== 0) {
+    if (!m.hasHold || m.holdFlag !== o.flag || g.time > m.holdUntil) {
+      const hq = g.world.hq[s.team];
+      const a = Math.atan2(hq.x - f.pos.x, hq.z - f.pos.z) + (rnd(g) - 0.5) * 1.4;
+      const r = 42 + rnd(g) * 36;
+      let x = clamp(f.pos.x + Math.sin(a) * r, 4, size - 4), z = clamp(f.pos.z + Math.cos(a) * r, 4, size - 4);
+      const c = nearestOpen(nav, cellOf(nav, x, z), 6, false);
+      if (c >= 0) { x = cellX(nav, c); z = cellZ(nav, c); }
+      m.holdX = x; m.holdZ = z; m.hasHold = true; m.holdFlag = o.flag; m.holdUntil = g.time + 30 + rnd(g) * 30; m.arrived = false;
+      m.scanYaw = yawTo({ x, y: 0, z }, f.pos);
+    }
+    m.goalX = m.holdX; m.goalZ = m.holdZ;
+    m.task = hyp(m.holdX - s.pos.x, m.holdZ - s.pos.z) < 2 ? 'hold' : 'obj';
+    return;
+  }
+  if (m.hasHold && m.holdFlag === o.flag && g.time < m.holdUntil) {
+    m.goalX = m.holdX; m.goalZ = m.holdZ;
+    if (hyp(m.holdX - s.pos.x, m.holdZ - s.pos.z) < 1.5) {
+      if (!m.arrived) {
+        m.arrived = true;
+        m.holdUntil = g.time + (o.defend ? 14 + rnd(g) * 18 : 7 + rnd(g) * 10);
+        // 밖(거점 중심 반대쪽)을 본다
+        m.scanYaw = hyp(m.holdX - f.pos.x, m.holdZ - f.pos.z) > 2 ? yawTo(f.pos, { x: m.holdX, y: 0, z: m.holdZ }) : s.yaw;
+      }
+      m.task = 'hold';
+    } else m.task = 'obj';
+    return;
+  }
+  if (dF < f.r + 30) {
+    const pts = flagCover(g, st, o.flag);
+    if (pts.length >= 2) {
+      const k = Math.floor(rnd(g) * (pts.length >> 1));
+      m.holdX = pts[k * 2]; m.holdZ = pts[k * 2 + 1];
+    } else {
+      const a = rnd(g) * Math.PI * 2, r = rnd(g) * f.r * 0.6;
+      m.holdX = f.pos.x + Math.sin(a) * r; m.holdZ = f.pos.z + Math.cos(a) * r;
+    }
+    m.hasHold = true; m.holdFlag = o.flag; m.holdUntil = g.time + 45; m.arrived = false;
+    m.goalX = m.holdX; m.goalZ = m.holdZ; m.task = 'obj';
+    return;
+  }
+  m.hasHold = false; m.task = 'obj';
+  // 분대장 근처에 (15m) 머물며 이동
+  const l = leaderOf(g, st, s);
+  if (l && l !== s) {
+    const dl = hyp(l.pos.x - s.pos.x, l.pos.z - s.pos.z);
+    if (m.following ? dl < 7 : dl > 15) m.following = !m.following;
+    if (m.following && dl < 120) {
+      const side = ((m.idx % 4) - 1.5) * 2.5;
+      const r = rightXZ(l.yaw), fw = forwardXZ(l.yaw);
+      m.goalX = clamp(l.pos.x + r.x * side - fw.x * 3, 2, size - 2);
+      m.goalZ = clamp(l.pos.z + r.z * side - fw.z * 3, 2, size - 2);
+      return;
+    }
+  } else m.following = false;
+  m.goalX = f.pos.x; m.goalZ = f.pos.z;
+}
+
+function decide(g: Game, st: AIState, s: Soldier, m: Mind): void {
+  const nav = st.nav;
+  const t = m.tgt >= 0 ? g.soldiers[m.tgt] : null;
+  const tD = t && m.vis ? hyp(t.pos.x - s.pos.x, t.pos.z - s.pos.z) : 1e9;
+  // 물러나기: 체력이 낮고 적이 보이면 가까운 엄폐로
+  if (m.task === 'retreat' && (g.time > m.retreatUntil || s.hp > s.maxHp * 0.85 || (!m.vis && g.time - m.seenT > 6 && s.hp > s.maxHp * 0.6))) m.task = 'obj';
+  if (m.task !== 'retreat' && t && m.vis && s.hp < s.maxHp * 0.5 && g.time > m.retreatT && tD > 6) {
+    m.retreatT = g.time + 5;
+    const cov = findCover(nav, s.pos, eyePos(t), 14, 8);
+    if (cov) { m.task = 'retreat'; m.holdX = cov.x; m.holdZ = cov.z; m.retreatUntil = g.time + 9; m.hasHold = false; }
+  }
+  if (m.task === 'retreat') { m.goalX = m.holdX; m.goalZ = m.holdZ; return; }
+
+  // 소생
+  if (m.task === 'revive') {
+    const d = g.soldiers[m.reviveId];
+    if (!d || d.state !== 'down' || hyp(d.pos.x - s.pos.x, d.pos.z - s.pos.z) > 50 || tD < 12) {
+      const cl = st.revClaim.get(m.reviveId);
+      if (cl && cl.by === s.id) st.revClaim.delete(m.reviveId);
+      m.task = 'obj'; m.reviveId = -1;
+    } else {
+      st.revClaim.set(d.id, { by: s.id, until: g.time + 3 });
+      m.goalX = d.pos.x; m.goalZ = d.pos.z;
+      return;
+    }
+  }
+  if (tD > 20) {
+    const medic = s.cls === 'support';
+    const R = medic ? 40 : 18;
+    let best = -1, bd = R * R;
+    for (const o of g.soldiers) {
+      if (o.team !== s.team || o.state !== 'down' || o.id === s.id || o.vehicle >= 0) continue;
+      if (!medic && o.squad !== s.squad) continue;
+      const d2 = (o.pos.x - s.pos.x) ** 2 + (o.pos.z - s.pos.z) ** 2;
+      if (d2 >= bd) continue;
+      const cl = st.revClaim.get(o.id);
+      if (cl && cl.by !== s.id && cl.until > g.time) continue;
+      bd = d2; best = o.id;
+    }
+    if (best >= 0) {
+      m.task = 'revive'; m.reviveId = best; m.smoked = false; m.hasHold = false;
+      st.revClaim.set(best, { by: s.id, until: g.time + 3 });
+      m.goalX = g.soldiers[best].pos.x; m.goalZ = g.soldiers[best].pos.z;
+      return;
+    }
+  }
+
+  // 수리
+  if (m.task === 'repair') {
+    const v = g.vehicles[m.repairV];
+    if (!v || !v.alive || v.hp >= v.maxHp * 0.96 || m.vis || hyp(v.pos.x - s.pos.x, v.pos.z - s.pos.z) > 45 || Math.abs(v.speed) > 3) { m.task = 'obj'; m.repairV = -1; }
+    else { m.goalX = v.pos.x; m.goalZ = v.pos.z; return; }
+  } else if (s.cls === 'engineer' && !m.vis && slotOf(s, ['repair'], false) >= 0) {
+    for (const v of g.vehicles) {
+      if (!v.alive || v.team !== s.team || v.hp >= v.maxHp * 0.7 || Math.abs(v.speed) > 2) continue;
+      if (hyp(v.pos.x - s.pos.x, v.pos.z - s.pos.z) > 30) continue;
+      const def = vehDef(v);
+      if (def && def.air && v.pos.y - heightAt(g.world, v.pos.x, v.pos.z) > 3) continue;
+      m.task = 'repair'; m.repairV = v.id; m.hasHold = false;
+      m.goalX = v.pos.x; m.goalZ = v.pos.z;
+      return;
+    }
+  }
+
+  // 탑승
+  if (m.task === 'board') {
+    const v = g.vehicles[m.vehId];
+    if (!v || !v.alive || g.time > m.vehUntil || v.seats.indexOf(-1) < 0 || tD < 30 || (v.seats[0] >= 0 && Math.abs(v.speed) > 1.5)) {
+      if (v) { const vm = vmind(st, g, v); if (vm.claimBy === s.id) vm.claimBy = -1; }
+      m.task = 'obj'; m.vehId = -1;
+    } else { m.goalX = v.pos.x; m.goalZ = v.pos.z; return; }
+  } else if (g.time - m.spawnT < 3 && m.vehId < 0 && tD > 60) tryBoard(g, st, s, m);
+  if ((m.task as Task) === 'board') return;
+
+  objectiveGoal(g, st, s, m);
+  // 홀드 중 가끔 둘러보기
+  if (m.task === 'hold' && g.time > m.scanT) {
+    m.scanT = g.time + 2.5 + rnd(g) * 3;
+    m.scanYaw = wrapAngle(m.scanYaw + (rnd(g) - 0.5) * 1.2);
+  }
+  // 멀리 쏠 때 가끔 앉기
+  if (m.vis && tD > 40 && rnd(g) < 0.25) m.crouchUntil = g.time + 1.5 + rnd(g) * 2;
+}
+
+// ───────────────────────── 보병 (매 틱) ─────────────────────────
+
+function anyVehicleNear(g: Game, s: Soldier, r: number): boolean {
+  for (const v of g.vehicles) {
+    if (!v.alive) continue;
+    const def = vehDef(v);
+    const half = def ? Math.max(def.size.x, def.size.z) * 0.5 : 2;
+    if (hyp(v.pos.x - s.pos.x, v.pos.z - s.pos.z) < r + half) return true;
+  }
+  return false;
+}
+
+function infantryTick(g: Game, st: AIState, s: Soldier, m: Mind, c: Controls, dt: number, think: boolean): void {
+  c.fire = false; c.ads = false; c.sprint = false; c.interact = false; c.lift = 0;
+  let stance: 'stand' | 'crouch' = 'stand';
+  const w = s.weapons[s.cur];
+  const eye = eyePos(s);
+  const t = m.tgt >= 0 ? g.soldiers[m.tgt] : null;
+  m.errY += (m.errTY - m.errY) * damp(3.5, dt);
+  m.errP += (m.errTP - m.errP) * damp(3.5, dt);
+
+  const far = pathStep(g, st, s, m, m.goalX, m.goalZ, think);
+  let mdx = W.x - s.pos.x, mdz = W.z - s.pos.z;
+  let moveK = far < (m.task === 'hold' ? 0.9 : 0.6) ? 0 : 1;
+  let engaged = false, tDist = 1e9;
+  let using = runUse(g, s, m, c, dt);
+
+  // ── 과제별 마무리 동작 ──
+  if (m.task === 'revive') {
+    const d = g.soldiers[m.reviveId];
+    if (d && d.state === 'down') {
+      const dd = hyp(d.pos.x - s.pos.x, d.pos.z - s.pos.z);
+      if (!using && !m.smoked && dd < 9 && g.time - m.seenT < 6) {
+        m.smoked = true;
+        const ks = slotOf(s, ['smoke']);
+        if (ks >= 0) { startUse(g, s, m, ks, null, { pitch: -1.0, dur: 1.5 }); using = true; }
+      }
+      if (dd < 1.3) {
+        moveK = 0; stance = 'crouch';
+        if (!using) {
+          const k = slotOf(s, ['defib']);
+          if (k >= 0) { startUse(g, s, m, k, { x: d.pos.x, y: d.pos.y + 0.2, z: d.pos.z }, { dur: 2.5 }); using = true; }
+          else if (!anyVehicleNear(g, s, 3)) { c.interact = true; lookAt(g, m, yawTo(s.pos, d.pos), -0.6, 1, dt); using = true; }
+          else m.task = 'obj';
+        }
+      } else if (dd < 3) { mdx = d.pos.x - s.pos.x; mdz = d.pos.z - s.pos.z; moveK = 0.6; }
+    }
+  } else if (m.task === 'repair') {
+    const v = g.vehicles[m.repairV], def = v ? vehDef(v) : undefined;
+    if (v && def) {
+      const reach = Math.max(def.size.x, def.size.z) * 0.5 + 1.6;
+      const dv = hyp(v.pos.x - s.pos.x, v.pos.z - s.pos.z);
+      if (dv < reach) {
+        moveK = 0;
+        if (!using) {
+          const k = slotOf(s, ['repair']);
+          if (k >= 0 && s.gadgets[k].active < 0.9) { startUse(g, s, m, k, { x: v.pos.x, y: v.pos.y + def.size.y * 0.5, z: v.pos.z }, { hold: true, dur: 3.5 }); using = true; }
+        }
+      } else if (dv < reach + 4) { mdx = v.pos.x - s.pos.x; mdz = v.pos.z - s.pos.z; moveK = 0.7; }
+    }
+  } else if (m.task === 'board') {
+    const v = g.vehicles[m.vehId], def = v ? vehDef(v) : undefined;
+    if (v && def) {
+      const half = Math.max(def.size.x, def.size.z) * 0.5;
+      const dv = hyp(v.pos.x - s.pos.x, v.pos.z - s.pos.z);
+      if (dv < half + 6) { mdx = v.pos.x - s.pos.x; mdz = v.pos.z - s.pos.z; moveK = dv < half + 0.6 ? 0 : 1; }
+      if (dv < half + 1.8 && g.time > m.enterT) { c.interact = true; m.enterT = g.time + 0.35; }
+    }
+  }
+
+  // ── 교전 ──
+  if (!using && t && m.vis && t.state === 'alive') {
+    engaged = true;
+    const tp = targetPoint(g, t, m.headAim, T1);
+    const a = solve(eye, tp, t.vel, w ? w.st.velocity : 700, 1, leadSkill(g));
+    tDist = a.dist;
+    const dYaw = wrapAngle(a.yaw + m.errY), dPitch = a.pitch + m.errP;
+    lookAt(g, m, dYaw, dPitch, 1, dt);
+    const tol = Math.max(0.03, Math.atan(0.45 / Math.max(1, tDist))) * 1.5;
+    const onAim = Math.abs(angleDiff(m.yaw, dYaw)) < tol && Math.abs(m.pitch - dPitch) < tol;
+    const cat = w ? w.st.cat : 'ar';
+    c.ads = tDist > 20 || cat === 'sniper' || cat === 'dmr';
+    if (t.spotT <= 0 && g.time > m.spotT) { c.spot = true; m.spotT = g.time + (s.cls === 'recon' ? 1.5 : 4 + rnd(g) * 4); }
+    if (m.task === 'hold' || m.task === 'retreat') {
+      if (tDist < 25 && far < 2.5) {
+        if (g.time > m.strafeT) { m.strafe = -m.strafe; m.strafeT = g.time + 0.5 + rnd(g) * 0.8; }
+        const r = rightXZ(a.yaw);
+        mdx = r.x * m.strafe * 0.7 + (m.holdX - s.pos.x) * 0.6; mdz = r.z * m.strafe * 0.7 + (m.holdZ - s.pos.z) * 0.6;
+        moveK = 1;
+      } else if (far < 2.5) { moveK = 0; stance = 'crouch'; }
+    } else if (m.task !== 'revive') {
+      if (tDist < 28) {
+        if (g.time > m.strafeT) { m.strafe = -m.strafe; m.strafeT = g.time + 0.45 + rnd(g) * 0.9; }
+        const r = rightXZ(a.yaw), l = hyp(mdx, mdz) || 1;
+        const push = cat === 'shotgun' || cat === 'smg' ? 0.45 : 0;
+        const fw = forwardXZ(a.yaw);
+        mdx = r.x * m.strafe + (mdx / l) * 0.3 + fw.x * push; mdz = r.z * m.strafe + (mdz / l) * 0.3 + fw.z * push;
+        moveK = 1;
+      } else if (tDist < 80) {
+        if (g.time < m.crouchUntil) { moveK = 0; stance = 'crouch'; } else moveK *= 0.45;
+      } else moveK *= 0.7;
+    }
+    gunFire(g, s, m, c, tDist, onAim, dt);
+    if (w && s.cur === 0 && s.held === 'weapon' && w.mag === 0 && tDist < 25 && s.swapT <= 0) {
+      const p = s.weapons[1];
+      if (p && p.mag > 0) { c.switchTo = 1; m.pistolT = g.time; }
+    }
+  } else if (!using) {
+    m.burstT = 0; m.firePrev = false;
+    if (t && g.time - m.seenT < 5) {
+      // 마지막으로 본 곳을 미리 겨눈다
+      const a = solve(eye, m.lk, null, 1000, 0, 0);
+      lookAt(g, m, a.yaw, a.pitch, 0.8, dt);
+      c.ads = a.dist > 25 && moveK < 0.5;
+      moveK *= 0.8;
+    } else if (g.time < m.alertUntil) {
+      lookAt(g, m, m.threatYaw, 0, 1, dt);
+    } else if (m.known >= 0 && g.soldiers[m.known] && moveK > 0) {
+      const k = g.soldiers[m.known];
+      const kd = hyp(k.pos.x - s.pos.x, k.pos.z - s.pos.z);
+      if (kd < 40) { const a = solve(eye, chestOf(k, T2), null, 1000, 0, 0); lookAt(g, m, a.yaw, a.pitch, 0.7, dt); moveK *= 0.8; }
+      else lookAt(g, m, yawTo(s.pos, { x: W.x, y: 0, z: W.z }), 0, 0.6, dt);
+    } else if (moveK > 0 && hyp(mdx, mdz) > 0.2) {
+      lookAt(g, m, Math.atan2(-mdx, -mdz), 0, 0.6, dt);
+    } else if (m.task === 'hold' || m.task === 'retreat') {
+      lookAt(g, m, m.scanYaw, 0, 0.4, dt);
+    }
+    if (m.task === 'hold' && moveK === 0 && g.time - m.seenT > 1) stance = 'crouch';
+    if (m.task === 'retreat' && far < 1.5) stance = 'crouch';
+  }
+
+  // ── 막힘 풀기·이동 ──
+  if (g.time < m.unstuckUntil && !engaged) {
+    const l = hyp(mdx, mdz) || 1, ux = mdx / l, uz = mdz / l;
+    mdx = -uz * m.unstuckDir - ux * 0.3; mdz = ux * m.unstuckDir - uz * 0.3;
+    moveK = 1;
+  }
+  applyLook(g, s, m, c);
+  moveDir(c, c.yaw, mdx, mdz, moveK);
+  c.sprint = !engaged && !using && moveK >= 1 && far > 18 && stance === 'stand' && c.mz > 0.85 && m.nVis === 0 && g.time - m.seenT > 3;
+  c.stance = stance;
+  stuckCheck(g, s, m, c, moveK > 0.3 && !engaged && !using, dt);
+
+  // ── 무기 손질 ──
+  if (!using && s.held === 'weapon' && w && !m.vis) {
+    if (w.reloadT <= 0 && w.mag < w.st.mag * 0.3 && w.reserve > 0 && s.swapT <= 0) c.reload = true;
+    if (s.cur === 1 && g.time - m.seenT > 2.5 && g.time - m.pistolT > 2) c.switchTo = 0;
+  }
+  if (s.held === 'weapon' && s.cur === 1 && w && w.mag === 0 && s.weapons[0] && s.weapons[0].mag + s.weapons[0].reserve > 0) c.switchTo = 0;
+  if (!m.use && s.held === 'gadget') c.switchTo = s.cur;
+}
+
+// ───────────────────────── 차량 ─────────────────────────
+
+function vehiclePath(g: Game, st: AIState, v: Vehicle, vm: VMind, gx: number, gz: number, think: boolean): void {
+  if (!think) return;
+  const moved = hyp(gx - vm.pgx, gz - vm.pgz) > 5;
+  const atEnd = vm.pi * 2 >= vm.path.length;
+  if (!(moved || vm.path.length === 0 || (atEnd && vm.partial) || g.time - vm.pathT > 25)) return;
+  if (!moved && g.time - vm.pathT < 1.5) return;
+  const r = findPath(st.nav, v.pos.x, v.pos.z, gx, gz, true, 4000);
+  if (!r) return;
+  vm.path = r.pts; vm.pi = 0; vm.pgx = gx; vm.pgz = gz; vm.partial = r.partial; vm.pathT = g.time;
+}
+
+function driveGround(g: Game, st: AIState, s: Soldier, m: Mind, v: Vehicle, vm: VMind, c: Controls, dt: number, think: boolean): void {
+  const o = orderOf(g, st, s);
+  const f = g.flags[o.flag];
+  if (!f) return;
+  const tracked = v.type !== 'ltv';
+  if (g.time - vm.boardT < 3.5) return; // 포수·승객 기다리기
+  const dF = hyp(f.pos.x - v.pos.x, f.pos.z - v.pos.z);
+  const stand = o.defend && f.owner === s.team ? Math.min(vm.standoff, 20) : vm.standoff;
+  if (dF < stand) {
+    // 화력 지원 위치에서 버티며 차체 앞을 위협 쪽으로
+    const thr = m.visV >= 0 ? g.vehicles[m.visV] : m.tgt >= 0 && m.vis ? g.soldiers[m.tgt] : null;
+    if (thr && tracked) {
+      const err = angleDiff(v.yaw, yawTo(v.pos, thr.pos));
+      c.mx = Math.abs(err) > 0.45 ? clamp(-err * 1.5, -1, 1) : 0;
+    }
+    vm.stuckT = 0;
+    return;
+  }
+  vehiclePath(g, st, v, vm, f.pos.x, f.pos.z, think);
+  while (vm.pi * 2 < vm.path.length && hyp(vm.path[vm.pi * 2] - v.pos.x, vm.path[vm.pi * 2 + 1] - v.pos.z) < 6) vm.pi++;
+  const wx = vm.pi * 2 < vm.path.length ? vm.path[vm.pi * 2] : f.pos.x;
+  const wz = vm.pi * 2 < vm.path.length ? vm.path[vm.pi * 2 + 1] : f.pos.z;
+  const err = angleDiff(v.yaw, Math.atan2(-(wx - v.pos.x), -(wz - v.pos.z)));
+  if (g.time < vm.revUntil) {
+    c.mz = -0.85;
+    c.mx = tracked ? clamp(-err * 1.5, -1, 1) : clamp(err * 1.5, -1, 1);
+    return;
+  }
+  const ae = Math.abs(err);
+  c.mx = clamp(-err * 2, -1, 1);
+  c.mz = ae > 1.2 ? (tracked ? 0.1 : 0.4) : clamp(1 - ae * 0.55, 0.35, 1);
+  if (dF - stand < 25) c.mz *= 0.6;
+  if (c.mz > 0.3 && Math.abs(v.speed) < 0.8) {
+    vm.stuckT += dt;
+    if (vm.stuckT > 2.5) { vm.stuckT = 0; vm.revUntil = g.time + 1.4 + rnd(g); vm.pathT = -99; vm.path = []; }
+  } else vm.stuckT = 0;
+}
+
+function buildRoute(g: Game, s: Soldier, v: Vehicle, vm: VMind): void {
+  const size = g.world.size;
+  const enemy = 1 - s.team;
+  let fl = g.flags.filter((f) => f.owner === enemy);
+  if (!fl.length) fl = g.flags.filter((f) => f.owner !== s.team || f.contested);
+  if (!fl.length) fl = g.flags.slice();
+  fl.sort((a, b) => hyp(a.pos.x - v.pos.x, a.pos.z - v.pos.z) - hyp(b.pos.x - v.pos.x, b.pos.z - v.pos.z));
+  const pts: number[] = [];
+  for (const f of fl.slice(0, 4)) {
+    const a0 = rnd(g) * Math.PI * 2;
+    for (let k = 0; k < 3; k++) {
+      const a = a0 + (k * Math.PI * 2) / 3;
+      pts.push(clamp(f.pos.x + Math.sin(a) * 75, 25, size - 25), clamp(f.pos.z + Math.cos(a) * 75, 25, size - 25));
+    }
+  }
+  vm.route = pts; vm.ri = 0; vm.routeT = g.time;
+}
+
+function flyHeli(g: Game, s: Soldier, m: Mind, v: Vehicle, vm: VMind, c: Controls, dt: number, think: boolean): void {
+  const w = g.world;
+  const gh = heightAt(w, v.pos.x, v.pos.z);
+  const alt = v.pos.y - gh;
+  if (vm.route.length === 0 || g.time - vm.routeT > 40) buildRoute(g, s, v, vm);
+  const fw = forwardXZ(v.yaw);
+  const ahead = Math.max(heightAt(w, v.pos.x + fw.x * 40, v.pos.z + fw.z * 40), heightAt(w, v.pos.x + fw.x * 80, v.pos.z + fw.z * 80));
+  const ref = Math.max(gh, ahead);
+  if (g.time - vm.boardT < 2.5) { c.yaw = v.yaw; return; }
+  // 공격 대상 고르기
+  let P: Vec3 | null = null;
+  if (think && g.time > vm.attackCd && g.time > vm.attackUntil) {
+    const tv = m.visV >= 0 ? g.vehicles[m.visV] : null;
+    if ((tv && !vehDef(tv)?.air && m.visVD < 260) || (m.vis && m.cluster >= 1)) vm.attackUntil = g.time + 7;
+  }
+  if (g.time < vm.attackUntil) {
+    const tv = m.visV >= 0 ? g.vehicles[m.visV] : null;
+    if (tv && tv.alive && !vehDef(tv)?.air) P = { x: tv.pos.x, y: tv.pos.y + 1, z: tv.pos.z };
+    else if (m.tgt >= 0 && g.time - m.seenT < 3) P = m.lk;
+    if (!P) { vm.attackUntil = 0; vm.attackCd = g.time + 4; }
+  } else if (vm.attackUntil > 0) { vm.attackUntil = 0; vm.attackCd = g.time + 10 + rnd(g) * 6; }
+  let tx: number, tz: number, altT = vm.alt;
+  const np = vm.route.length >> 1;
+  if (P) { tx = P.x; tz = P.z; altT = 30; }
+  else {
+    tx = vm.route[vm.ri * 2]; tz = vm.route[vm.ri * 2 + 1];
+    if (hyp(tx - v.pos.x, tz - v.pos.z) < 35) { vm.ri = (vm.ri + 1) % Math.max(1, np); tx = vm.route[vm.ri * 2]; tz = vm.route[vm.ri * 2 + 1]; }
+  }
+  const yT = ref + altT;
+  let lift = clamp((yT - v.pos.y) * 0.2 - v.vel.y * 0.12, -1, 1);
+  if (Math.abs(lift) < 0.06) lift = yT > v.pos.y ? 0.06 : -0.06;
+  const want = Math.atan2(-(tx - v.pos.x), -(tz - v.pos.z));
+  const err = angleDiff(v.yaw, want);
+  const ae = Math.abs(err);
+  c.yaw = want; c.pitch = 0;
+  if (alt < 12 && !P) { c.lift = 1; c.mz = 0; c.mx = 0; return; } // 이륙
+  c.lift = lift;
+  c.mx = ae > 0.2 ? clamp(-err * 0.6, -0.5, 0.5) : 0;
+  if (P) {
+    const from = seatWorldPos(v, 0);
+    const hd = hyp(P.x - from.x, P.z - from.z);
+    const need = Math.atan2(P.y - from.y, hd);
+    c.mz = hd < 55 ? -0.4 : ae < 0.5 ? clamp(-need / 0.35, 0.2, 1) : 0.3;
+    if (hd < 55) { vm.attackUntil = 0; vm.attackCd = g.time + 8; }
+    const ad = seatAimDir(v, 0);
+    const dx = P.x - from.x, dy = P.y - from.y, dz = P.z - from.z, dl = hyp(dx, dy, dz) || 1;
+    const cosE = (ad.x * dx + ad.y * dy + ad.z * dz) / dl;
+    if (g.time > m.vReactT && dl < 260 && cosE > Math.cos(4 * DEG)) c.fire = true;
+  } else {
+    c.mz = ae < 0.5 ? 1 : ae < 1.2 ? 0.45 : 0.1;
+  }
+}
+
+function gunnerTick(g: Game, s: Soldier, m: Mind, v: Vehicle, c: Controls, dt: number): void {
+  const def = vehDef(v);
+  const sd = def ? def.seats[s.seat] : undefined;
+  if (!sd || !sd.weapon) return;
+  const wd = VWEAPONS[sd.weapon];
+  if (!wd) return;
+  if (s.seat === 0 && !sd.turret) return; // 고정 무기 (헬기 로켓)는 조종에서
+  const from = seatWorldPos(v, s.seat);
+  const antiV = wd.kind === 'cannon' || wd.kind === 'atgm' || wd.kind === 'rockets';
+  const tv = m.visV >= 0 ? g.vehicles[m.visV] : null;
+  const tdef = tv ? vehDef(tv) : undefined;
+  const tvOk = !!tv && tv.alive && !!tdef && (wd.kind !== 'mg' || tv.type === 'ltv' || tdef.air) && !((wd.kind === 'cannon' || wd.kind === 'atgm') && tdef.air);
+  const ts = m.tgt >= 0 && m.vis ? g.soldiers[m.tgt] : null;
+  let P: Vec3 | null = null, PV: Vec3 | null = null, react = m.reactT;
+  if (tvOk && tv && tdef && (antiV || !ts || m.visVD < 60)) {
+    P = { x: tv.pos.x, y: tv.pos.y + tdef.size.y * 0.5, z: tv.pos.z }; PV = tv.vel; react = m.vReactT;
+  } else if (ts && !(antiV && wd.kind !== 'cannon' && wd.kind !== 'rockets')) {
+    P = targetPoint(g, ts, false, T1); PV = ts.vel;
+  }
+  m.errY += (m.errTY - m.errY) * damp(3.5, dt);
+  m.errP += (m.errTP - m.errP) * damp(3.5, dt);
+  if (!P) {
+    const base = sd.turret ? v.yaw + v.tYaw : v.yaw;
+    lookAt(g, m, g.time - m.seenT < 4 ? yawTo(from, m.lk) : base, 0, 0.5, dt);
+    c.yaw = m.yaw; c.pitch = m.pitch;
+    m.gunBurst = 0;
+    return;
+  }
+  const grav = wd.kind === 'mg' ? 1 : wd.kind === 'rockets' ? 0.15 : wd.kind === 'atgm' ? 0 : 0.4;
+  const a = solve(from, P, PV, wd.velocity, grav, leadSkill(g));
+  const dY = a.yaw + m.errY * 0.5, dP = a.pitch + m.errP * 0.5;
+  lookAt(g, m, dY, dP, 1.3, dt);
+  c.yaw = m.yaw; c.pitch = m.pitch;
+  const ad = seatAimDir(v, s.seat), want = dirFrom(dY, dP);
+  const cosE = ad.x * want.x + ad.y * want.y + ad.z * want.z;
+  const tol = wd.kind === 'cannon' || wd.kind === 'atgm' ? 1 : wd.kind === 'autocannon' ? 2 : 3;
+  const range = wd.kind === 'mg' ? 230 : 330;
+  if (g.time < react || a.dist > range || cosE < Math.cos(tol * DEG)) { m.gunBurst = 0; return; }
+  if (wd.kind === 'cannon' || wd.kind === 'atgm') { c.fire = true; return; }
+  if (m.gunBurst > 0) { c.fire = true; m.gunBurst -= dt; if (m.gunBurst <= 0) m.gunPause = 0.25 + rnd(g) * 0.4; }
+  else if (m.gunPause > 0) m.gunPause -= dt;
+  else { m.gunBurst = 0.5 + rnd(g) * 0.8; c.fire = true; }
+}
+
+function vehicleTick(g: Game, st: AIState, s: Soldier, m: Mind, c: Controls, dt: number, think: boolean): void {
+  const v = g.vehicles[s.vehicle];
+  const def = v ? vehDef(v) : undefined;
+  c.fire = false; c.ads = false; c.sprint = false; c.interact = false; c.mx = 0; c.mz = 0; c.lift = 0; c.stance = 'stand';
+  if (!v || !def || !v.alive) return;
+  const vm = vmind(st, g, v);
+  if (m.inVeh !== s.vehicle) {
+    m.inVeh = s.vehicle; m.yaw = s.ctl.yaw; m.pitch = s.ctl.pitch; vm.boardT = g.time; vm.hpHist = v.hp;
+    m.task = 'obj'; m.use = null;
+    if (vm.claimBy === s.id) vm.claimBy = -1;
+  }
+  const alt = v.pos.y - heightAt(g.world, v.pos.x, v.pos.z);
+  // 대응책
+  if (g.time > vm.hpT) {
+    const drop = vm.hpHist - v.hp;
+    vm.hpHist = v.hp; vm.hpT = g.time + 1.5;
+    if (drop > v.maxHp * 0.12 && v.counterCd <= 0) c.counter = true;
+  }
+  if (v.lockWarn > 0.5 && v.counterCd <= 0) c.counter = true;
+  // 내리기
+  if (v.hp < v.maxHp * 0.2 && !(def.air && alt > 5)) { c.exit = true; return; }
+  if (s.seat !== 0 && v.seats[0] < 0) c.seat = 0;
+  const sd = def.seats[s.seat];
+  if (s.seat === 0) {
+    if (def.air) flyHeli(g, s, m, v, vm, c, dt, think);
+    else {
+      driveGround(g, st, s, m, v, vm, c, dt, think);
+      if (!sd || !sd.weapon) { lookAt(g, m, v.yaw, 0, 0.5, dt); c.yaw = m.yaw; c.pitch = m.pitch; }
+    }
+  }
+  if (sd && sd.weapon) gunnerTick(g, s, m, v, c, dt);
+  else if (s.seat !== 0) {
+    // 승객: 목표 가까이서 차가 서면 내린다
+    lookAt(g, m, v.yaw, 0, 0.5, dt); c.yaw = m.yaw; c.pitch = m.pitch;
+    const o = orderOf(g, st, s), f = g.flags[o.flag];
+    const dF = f ? hyp(f.pos.x - v.pos.x, f.pos.z - v.pos.z) : 1e9;
+    const slow = Math.abs(v.speed) < 1.5 && (!def.air || alt < 2.5);
+    if (slow && g.time - vm.boardT > 5 && (dF < 70 || (g.time - vm.boardT > 40 && vm.stuckT > 1))) c.exit = true;
+  }
+}
+
+// ───────────────────────── 매 스텝 ─────────────────────────
+
+let claimSweep = 0;
+
+export function updateBots(g: Game, dt: number): void {
+  let st = STATE.get(g);
+  if (!st) { initBots(g); st = STATE.get(g); if (!st) return; }
+  navFrame(st.nav);
+  if (g.time >= st.teams[0].next) commander(g, st, 0);
+  if (g.time >= st.teams[1].next) commander(g, st, 1);
+  if (g.time > claimSweep) {
+    claimSweep = g.time + 10;
+    for (const [k, v] of st.revClaim) if (v.until < g.time) st.revClaim.delete(k);
+  }
+  let thinkLeft = 18;
+  const ss = g.soldiers;
+  for (let i = 0; i < ss.length; i++) {
+    const s = ss[i];
+    if (s.isPlayer || s.id === g.player) continue;
+    let m = s.ai as Mind | null;
+    if (!m || typeof m !== 'object' || typeof m.idx !== 'number') { m = newMind(g, s); s.ai = m; }
+    const c = s.ctl;
+    if (s.state !== 'alive') {
+      neutral(c);
+      if (m.prev === 'alive' && m.reviveId >= 0) { const cl = st.revClaim.get(m.reviveId); if (cl && cl.by === s.id) st.revClaim.delete(m.reviveId); }
+      m.prev = s.state;
+      continue;
+    }
+    if (m.prev !== 'alive') { resetLife(g, s, m); m.prev = 'alive'; }
+    clearEdges(c);
+    m.think -= dt;
+    let think = false;
+    if (m.think <= 0 && thinkLeft > 0) {
+      thinkLeft--;
+      think = true;
+      m.think = 0.2 + rnd(g) * 0.15;
+      perceive(g, s, m);
+      if (s.vehicle < 0) { classActs(g, st, s, m); decide(g, st, s, m); }
+    }
+    if (s.vehicle >= 0) vehicleTick(g, st, s, m, c, dt, think);
+    else {
+      if (m.inVeh >= 0) {
+        m.inVeh = -1; m.yaw = s.yaw; m.pitch = s.pitch; m.path = []; m.pgx = 1e9; m.task = 'obj'; m.vehId = -1;
+      }
+      infantryTick(g, st, s, m, c, dt, think);
     }
   }
 }

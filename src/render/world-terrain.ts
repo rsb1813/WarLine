@@ -200,8 +200,19 @@ export class TerrainLayer {
     const nH = fbm(seed + 51, 4), nS = fbm(seed + 53, 3), nP = fbm(seed + 57, 3);
     const hillAmp = 18 + 45 * w.def.hills;
     const theme = w.def.theme;
-    const far = lin(theme === 'tundra' ? 0x9a9a7e : theme === 'industrial' ? 0xd2d5d8 : 0xe9eef4);
-    const farSnow = lin(0xe6ecf2), farVeg = lin(0x746a56), silt = lin(SILT);
+    // 먼 둘레 색: 지도 가장자리 평균 색과 테마 색을 섞는다 (가장자리와 따로 놀지 않게)
+    const avgC = new THREE.Color(0, 0, 0);
+    const avgG = [0, 0, 0, 0];
+    for (let r = 0; r < R; r++) {
+      const k = rays[r].k;
+      avgC.r += COL[k * 3]; avgC.g += COL[k * 3 + 1]; avgC.b += COL[k * 3 + 2];
+      for (let q = 0; q < 4; q++) avgG[q] += GR[k * 4 + q];
+    }
+    avgC.multiplyScalar(1 / R);
+    for (let q = 0; q < 4; q++) avgG[q] /= R;
+    const themeFar = lin(theme === 'tundra' ? 0x8e8a74 : theme === 'industrial' ? 0xc4c7ca : 0xe9eef4);
+    const far = avgC.clone().lerp(themeFar, theme === 'snow' ? 0.7 : 0.4);
+    const farSnow = lin(0xe6ecf2).lerp(avgC, 0.2), farVeg = lin(0x746a56), silt = lin(SILT);
     const pos = new Float32Array(R * NK * 3), nor = new Float32Array(R * NK * 3);
     const col = new Float32Array(R * NK * 3), gr = new Float32Array(R * NK * 4);
     const c = new THREE.Color(), e = new THREE.Color();
@@ -232,11 +243,13 @@ export class TerrainLayer {
         if (h < water + 0.3) c.lerp(silt, smoothstep(water + 0.3, water - 1.2, h));
         col[o * 3] = c.r; col[o * 3 + 1] = c.g; col[o * 3 + 2] = c.b;
         const g0 = GR.subarray(ry.k * 4, ry.k * 4 + 4);
-        const fs = theme === 'tundra' ? smoothstep(0.45, 0.65, pv) : 1;
-        gr[o * 4] = g0[0] + (fs - g0[0]) * t;
-        gr[o * 4 + 1] = g0[1] + ((1 - fs) - g0[1]) * t;
+        const fs = theme === 'tundra' ? smoothstep(0.45, 0.65, pv) : theme === 'snow' ? 0.85 : 0.6;
+        const fS = avgG[0] * 0.3 + fs * 0.7, fV = avgG[1] * 0.3 + (1 - fs) * 0.7 * (theme === 'tundra' ? 1 : 0.3);
+        const fR = Math.max(0, 1 - fS - fV);
+        gr[o * 4] = g0[0] + (fS - g0[0]) * t;
+        gr[o * 4 + 1] = g0[1] + (fV - g0[1]) * t;
         gr[o * 4 + 2] = g0[2] * (1 - t);
-        gr[o * 4 + 3] = g0[3] * (1 - t);
+        gr[o * 4 + 3] = g0[3] + (fR - g0[3]) * t;
       }
     }
     const idx: number[] = [];
