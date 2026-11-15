@@ -1,5 +1,5 @@
 // sim-core: 피해·쓰러짐·사망·폭발·차량 피해·소생·연막 판정·표시·세계 파괴 반영
-import type { BreakResult, Game, Soldier, Team, Vec3, Vehicle } from '../types';
+import type { BreakResult, Game, Placed, Soldier, Team, Vec3, Vehicle } from '../types';
 import { DIFFS, VEHICLES } from '../defs';
 import { blastWorld, lineOfSight } from '../world';
 import { clamp, forwardXZ, rightXZ, yawTo } from '../math';
@@ -178,11 +178,9 @@ export function reviveSoldier(g: Game, t: Soldier, by: number, hp: number): void
   c.downWeapon[t.id] = '';
   c.downHead[t.id] = 0;
   emit(g, { k: 'revive', s: t.id, by });
+  // 점수는 부른 쪽이 준다 (손 소생: sim-core, 제세동기: sim-gadgets)
   const r = by >= 0 ? g.soldiers[by] : undefined;
-  if (r && r.id !== t.id) {
-    r.revives++;
-    award(g, r.id, 100, '소생');
-  }
+  if (r && r.id !== t.id) r.revives++;
 }
 
 // ───────────────────────── 폭발 ─────────────────────────
@@ -268,7 +266,7 @@ export function explode(
     if (d2 >= r * r) continue;
     const f = Math.pow(1 - Math.sqrt(d2) / r, 1.2);
     if (p.kind === 'atmine' || p.kind === 'claymore') {
-      if (f > 0.2) chainDetonate(g, p.id);
+      if (f > 0.2) chainDetonate(g, p);
     } else if (p.kind === 'breach') {
       if (f > 0.3) p.alive = false;
     } else if (p.hp > 0) {
@@ -289,9 +287,8 @@ export function explode(
   }
 }
 
-function chainDetonate(g: Game, pid: number): void {
-  const p = g.placed.find((x) => x.id === pid);
-  if (!p || !p.alive) return;
+function chainDetonate(g: Game, p: Placed): void {
+  if (!p.alive) return;
   p.alive = false;
   const pos: Vec3 = { x: p.pos.x, y: p.pos.y + 0.1, z: p.pos.z };
   if (p.kind === 'atmine') {

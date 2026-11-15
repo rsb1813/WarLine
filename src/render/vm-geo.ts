@@ -49,7 +49,7 @@ export function sideGeo(pts: [number, number][], thick: number, bevel = 0.0015, 
     const b = Math.min(bevel, thick * 0.45);
     const depth = Math.max(0.0005, thick - 2 * b);
     const g = new THREE.ExtrudeGeometry(sh, {
-      depth, bevelEnabled: b > 0, bevelThickness: b, bevelSize: b * 0.9, bevelSegments: 2, curveSegments: curveSeg,
+      depth, bevelEnabled: b > 0, bevelThickness: b, bevelSize: b * 0.9, bevelOffset: -b * 0.9, bevelSegments: 2, curveSegments: curveSeg,
     });
     // shape (u=z, v=y), extrusion along +Z → rotate so extrusion runs along X and u maps to z.
     g.rotateY(-Math.PI / 2);
@@ -68,7 +68,7 @@ export function frontGeo(pts: [number, number][], d: number, bevel = 0.001, hole
     for (const h of holes) sh.holes.push(new THREE.Path(h.map(p => new THREE.Vector2(p[0], p[1]))));
     const b = Math.min(bevel, d * 0.45);
     const depth = Math.max(0.0005, d - 2 * b);
-    const g = new THREE.ExtrudeGeometry(sh, { depth, bevelEnabled: b > 0, bevelThickness: b, bevelSize: b * 0.9, bevelSegments: 1, curveSegments: 6 });
+    const g = new THREE.ExtrudeGeometry(sh, { depth, bevelEnabled: b > 0, bevelThickness: b, bevelSize: b * 0.9, bevelOffset: -b * 0.9, bevelSegments: 1, curveSegments: 6 });
     g.translate(0, 0, -depth / 2);
     g.computeVertexNormals();
     return g;
@@ -78,10 +78,11 @@ export function frontGeo(pts: [number, number][], d: number, bevel = 0.001, hole
 /** lathe around the Z axis: pts are [r, z] */
 export function latheZ(pts: [number, number][], seg = 20): THREE.BufferGeometry {
   return cg(`lz:${pts.map(p => r4(p[0]) + ',' + r4(p[1])).join(';')}:${seg}`, () => {
-    // LatheGeometry revolves around Y with points (x=r, y=h); then rotate Y→Z
-    const g = new THREE.LatheGeometry(pts.map(p => new THREE.Vector2(Math.max(0.00001, p[0]), -p[1])), seg);
-    g.rotateX(-Math.PI / 2);
-    // y = -z  -> after rotateX(-90): (x, y, z) → (x, z, -y)... map so that input z is world z
+    // LatheGeometry revolves around Y with points (x=r, y=h), profile must run with increasing h for outward faces.
+    const p = pts[0][1] > pts[pts.length - 1][1] ? [...pts].reverse() : pts;
+    const g = new THREE.LatheGeometry(p.map(q => new THREE.Vector2(Math.max(0.00001, q[0]), q[1])), seg);
+    // rotateX(+90°): (x, y, z) → (x, -z, y), so profile h becomes world z
+    g.rotateX(Math.PI / 2);
     return g;
   });
 }
