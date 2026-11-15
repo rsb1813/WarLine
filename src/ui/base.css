@@ -1,0 +1,48 @@
+/* 공통 디자인 토큰과 바탕 스타일. 리드 외에는 수정 금지. 각 모듈은 자기 css 를 따로 둔다. */
+:root {
+  color-scheme: dark;
+  --bg: #07090c;
+  --bg-2: #0d1117;
+  --panel: rgba(10, 14, 19, 0.82);
+  --panel-solid: #11161d;
+  --panel-2: #18202a;
+  --line: rgba(255, 255, 255, 0.1);
+  --line-2: rgba(255, 255, 255, 0.22);
+  --fg: #eef2f5;
+  --dim: #8e9aa6;
+  --dim-2: #5f6b77;
+  /* 강조: 앰버 */
+  --accent: #ffb52e;
+  --accent-2: #ffd27a;
+  --accent-ink: #1b1204;
+  /* 아군, 분대, 적, 중립 */
+  --friend: #4fb6ff;
+  --squad: #6dfca0;
+  --enemy: #ff4a3d;
+  --neutral: #e8e3d4;
+  --ok: #6dfca0;
+  --warn: #ffb52e;
+  --bad: #ff4a3d;
+  --f-display: 'Saira Condensed', 'IBM Plex Sans KR', system-ui, sans-serif;
+  --f-body: 'IBM Plex Sans KR', system-ui, -apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+  /* 안전 영역 여백 */
+  --gl: max(16px, env(safe-area-inset-left, 0px));
+  --gr: max(16px, env(safe-area-inset-right, 0px));
+  --gt: env(safe-area-inset-top, 0px);
+  --gb: env(safe-area-inset-bottom, 0px);
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--fg); font-family: var(--f-body); font-size: 14px; line-height: 1.5; overflow: hidden; -webkit-tap-highlight-color: transparent; }
+#app, #screen { position: relative; height: 100%; overflow: hidden; }
+[hidden] { display: none !important; }
+h1, h2, h3, h4, h5, p, ul, ol, dl, dd, figure { margin: 0; padding: 0; }
+ul, ol { list-style: none; }
+button { font: inherit; color: var(--fg); background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 2px; padding: 6px 14px; min-height: 38px; cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--fg); }
+button:disabled { opacity: 0.4; cursor: default; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
+button.primary:hover:not(:disabled) { border-color: #fff; }
+small { font-size: 12px; color: var(--dim); }
+.display { font-family: var(--f-display); letter-spacing: 0.04em; text-transform: uppercase; }
