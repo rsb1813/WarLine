@@ -267,7 +267,7 @@ function poseUpright(P: Float32Array): void {
     const ph = I.phase + (sd > 0 ? PI : 0);
     const sw = Math.sin(ph), cw = Math.cos(ph);
     let fx = sd * 0.13, fy = SEG.ankle, fz = sd < 0 ? -0.05 : 0.05;
-    if (sd > 0) { fx = lerp(fx, 0.14, kneel); fy = lerp(fy, 0.115, kneel); fz = lerp(fz, pz + 0.4, kneel); }
+    if (sd > 0) { fx = lerp(fx, 0.14, kneel); fy = lerp(fy, 0.17, kneel); fz = lerp(fz, pz + 0.4, kneel); }
     else { fx = lerp(fx, -0.15, kneel); fz = lerp(fz, -0.3, kneel); }
     const wx = sd * 0.12 + I.mx * sw * A;
     const wy = SEG.ankle + Math.max(0, cw) * lerp(0.08, 0.17, sp) * (1 - c * 0.4) * Math.min(1, I.sf + 0.3);
@@ -284,7 +284,7 @@ function poseUpright(P: Float32Array): void {
     svx(P, k === 0 ? FL : FR, fx, fy, fz);
     svx(P, k === 0 ? KL : KR, kx, ky, kz);
     let fp = sw * 0.3 * mv * clamp(-I.mz * 1.2, -1, 1);
-    if (sd > 0) fp = lerp(fp, -1.15, kneel);
+    if (sd > 0) fp = lerp(fp, -1.0, kneel);
     fp += I.air * 0.3 + I.slide * (sd > 0 ? 0.5 : -0.6);
     qe(_q1, fp, -sd * 0.12, 0);
     rot(_q1, 0, 1, 0, _v3); sv(P, k === 0 ? UL : UR, _v3);
@@ -304,14 +304,14 @@ function poseProne(P: Float32Array): void {
   const crawl = I.mv;
   const p = clamp(I.pitch, -0.4, 0.6);
   qe(_qB, -1.47 + p * 0.2, 0, Math.sin(I.phase) * 0.06 * crawl);
-  _pel.set(0, 0.13, 0.0 + Math.sin(I.phase * 2) * 0.03 * crawl);
+  _pel.set(0, 0.15, 0.0 + Math.sin(I.phase * 2) * 0.03 * crawl);
   _qT.copy(_qB).multiply(qe(_q1, 0.05 + p * 0.1, 0, 0));
   qe(_qH, -0.55 + p * 0.7, 0, 0);
   sv(P, PP, _pel); sq(P, PQ, _qB); sq(P, TQ, _qT); sq(P, HQ, _qH);
   for (let k = 0; k < 2; k++) {
     const sd = k === 0 ? -1 : 1;
     const kk = Math.max(0, Math.sin(I.phase + (sd > 0 ? PI : 0))) * crawl;
-    svx(P, k === 0 ? FL : FR, sd * (0.2 + 0.14 * kk), 0.08 + 0.02 * kk, _pel.z + 0.86 - 0.4 * kk);
+    svx(P, k === 0 ? FL : FR, sd * (0.2 + 0.14 * kk), 0.17 + 0.02 * kk, _pel.z + 0.84 - 0.4 * kk);
     svx(P, k === 0 ? KL : KR, sd * 0.5, -1, -0.15);
     svx(P, k === 0 ? UL : UR, 0, 0.2, -1);
     svx(P, k === 0 ? WL : WR, sd * 0.25, -1, -0.2);
@@ -344,8 +344,8 @@ function droppedGun(P: Float32Array, x: number, z: number, yaw: number): void {
 function poseDown(P: Float32Array, limp: number): void {
   const t = I.t;
   const br = Math.sin(t * 2.6) * 0.04 * (1 - limp);
-  qe(_qB, -PI / 2, 0, 0).multiply(qe(_q1, 0, 0.72 * PI, 0));
-  _pel.set(0, 0.14, 0.15);
+  qe(_qB, -PI / 2, 0, 0).multiply(qe(_q1, 0, 0.5 * PI, 0));
+  _pel.set(0, 0.21, 0.15);
   _qT.copy(_qB).multiply(qe(_q1, -0.1 - br, 0, 0));
   _qH.copy(_qB).multiply(qe(_q1, lerp(-0.35, -0.1, limp), lerp(0.35 * Math.sin(t * 0.5), 0.9, limp), 0));
   sv(P, PP, _pel); sq(P, PQ, _qB); sq(P, TQ, _qT); sq(P, HQ, _qH);
@@ -354,7 +354,7 @@ function poseDown(P: Float32Array, limp: number): void {
   // 오른손 배 위, 왼손 천천히 허우적
   rot(_qT, 0.02, 0.24, -0.17, _hR).add(_pel);
   const am = Math.sin(t * 1.3) * (1 - limp);
-  rot(_qT, -0.15, 0.1 + 0.06 * am, -0.35 - 0.08 * am, _hL).add(_SL);
+  rot(_qT, -0.05, 0.1 + 0.06 * am, -0.35 - 0.08 * am, _hL).add(_SL);
   if (limp > 0) {
     rot(_qT, 0.42, -0.02, 0.06, _a).add(_SR); _hR.lerp(_a, limp);
     rot(_qT, -0.45, 0.12, 0.06, _a).add(_SL); _hL.lerp(_a, limp);
@@ -362,10 +362,10 @@ function poseDown(P: Float32Array, limp: number): void {
   sv(P, HL, _hL); sv(P, HR, _hR);
   rot(_qT, -0.8, -0.2, 0.4, _v1); sv(P, EL, _v1);
   rot(_qT, 0.8, -0.2, 0.4, _v1); sv(P, ER, _v1);
-  rot(_qB, 0.13, -0.85, 0.02, _v1).add(_pel); sv(P, FR, _v1);
-  rot(_qB, -0.16, lerp(-0.62, -0.8, limp), lerp(-0.1, 0, limp), _v1).add(_pel); sv(P, FL, _v1);
-  rot(_qB, -0.2, 0, -1, _v1); sv(P, KL, _v1);
-  rot(_qB, 0.2, 0, -1, _v1); sv(P, KR, _v1);
+  rot(_qB, 0.1, -0.85, 0.02, _v1).add(_pel); sv(P, FR, _v1);
+  rot(_qB, 0.02, lerp(-0.6, -0.72, limp), lerp(-0.22, -0.1, limp), _v1).add(_pel); sv(P, FL, _v1);
+  rot(_qB, 0.3, 0, -1, _v1); sv(P, KL, _v1);
+  rot(_qB, 0.1, 0, -1, _v1); sv(P, KR, _v1);
   rot(_qB, 0, 1, 0, _v1); sv(P, UL, _v1); sv(P, UR, _v1);
   rot(_qB, -0.3, 0, -1, _v1); sv(P, WL, _v1);
   rot(_qB, 0.3, 0, -1, _v1); sv(P, WR, _v1);
@@ -376,29 +376,29 @@ function poseDead(P: Float32Array, v: number): void {
   const sg = I.sign;
   if (v === 0) {
     // 뒤로 넘어져 누움
-    qe(_qB, PI / 2 - 0.05, 0, sg * 0.08);
-    _pel.set(0, 0.13, 0.5);
-    _qT.copy(_qB).multiply(qe(_q1, 0.04, 0, 0));
-    _qH.copy(_qB).multiply(qe(_q1, 0.15, 0.9 * sg, 0));
+    // 뒤로 넘어져 옆으로 누움 (배낭이 땅에 박히지 않게 옆으로)
+    qe(_qB, PI / 2 - 0.08, 0, 0).multiply(qe(_q1, 0, sg * PI / 2, 0));
+    _pel.set(0, 0.21, 0.5);
+    _qT.copy(_qB).multiply(qe(_q1, -0.12, 0, 0));
+    _qH.copy(_qT).multiply(qe(_q1, -0.25, 0, 0.15 * sg));
     sv(P, PP, _pel); sq(P, PQ, _qB); sq(P, TQ, _qT); sq(P, HQ, _qH);
     rot(_qT, SEG.shoulderX, SEG.shoulderY, 0, _SR).add(_pel);
     rot(_qT, -SEG.shoulderX, SEG.shoulderY, 0, _SL).add(_pel);
-    rot(_qT, 0.48, 0.18 + sg * 0.08, 0.06, _hR).add(_SR);
-    rot(_qT, -0.48, 0.18 - sg * 0.12, 0.06, _hL).add(_SL);
-    rot(_qT, -0.3, -1, 0.5, _v1); sv(P, EL, _v1);
-    rot(_qT, 0.3, -1, 0.5, _v1); sv(P, ER, _v1);
-    rot(_qB, 0.2, -0.84, 0.03, _v1).add(_pel); sv(P, FR, _v1);
-    rot(_qB, -0.16, sg > 0 ? -0.62 : -0.84, 0.03, _v1).add(_pel); sv(P, FL, _v1);
-    rot(_qB, -0.3, 0, -1, _v1); sv(P, KL, _v1);
-    rot(_qB, 0.3, 0, -1, _v1); sv(P, KR, _v1);
+    const up = sg > 0 ? _SR : _SL, dn = sg > 0 ? _SL : _SR;
+    rot(_qT, 0.1 * sg, -0.12, -0.34, sg > 0 ? _hR : _hL).add(up);
+    rot(_qT, -0.06 * sg, 0.45, -0.12, sg > 0 ? _hL : _hR).add(dn);
+    rot(_qT, -0.3, -0.6, 0.6, _v1); sv(P, EL, _v1);
+    rot(_qT, 0.3, -0.6, 0.6, _v1); sv(P, ER, _v1);
+    rot(_qB, -0.1 * sg, -0.85, 0, _v1).add(_pel); sv(P, sg > 0 ? FL : FR, _v1);
+    rot(_qB, 0.06 * sg, -0.6, -0.25, _v1).add(_pel); sv(P, sg > 0 ? FR : FL, _v1);
+    rot(_qB, 0, 0, -1, _v1); sv(P, KL, _v1); sv(P, KR, _v1);
     rot(_qB, 0, 1, 0, _v1); sv(P, UL, _v1); sv(P, UR, _v1);
-    rot(_qB, -0.6, 0, -1, _v1); sv(P, WL, _v1);
-    rot(_qB, 0.6, 0, -1, _v1); sv(P, WR, _v1);
-    droppedGun(P, 0.55 * sg, -0.15, 0.8 * sg);
+    rot(_qB, 0, 0, -1, _v1); sv(P, WL, _v1); sv(P, WR, _v1);
+    droppedGun(P, -0.6 * sg, 0.2, 0.8 * sg);
   } else if (v === 1) {
     // 앞으로 엎어짐
     qe(_qB, -PI / 2 + 0.04, 0, sg * 0.1);
-    _pel.set(0, 0.13, -0.45);
+    _pel.set(0, 0.17, -0.45);
     _qT.copy(_qB).multiply(qe(_q1, -0.03, 0, 0));
     _qH.copy(_qB).multiply(qe(_q1, 0.2, 1.2 * sg, 0));
     sv(P, PP, _pel); sq(P, PQ, _qB); sq(P, TQ, _qT); sq(P, HQ, _qH);
