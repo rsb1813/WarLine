@@ -117,12 +117,12 @@ function neutral(c: Controls): void {
 const TOOLS: GadgetKind[] = ['repair', 'defib'];
 const THROWN: GadgetKind[] = ['frag', 'smoke', 'flash', 'incendiary', 'impact'];
 /** 그 종류 장비 칸 (ready=true 면 지금 쓸 수 있는 것만) */
-function slotOf(s: Soldier, kinds: GadgetKind[], ready = true): -1 | 0 | 1 | 2 {
+function slotOf(s: Soldier, kinds: GadgetKind[], ready = true): number {
   for (let i = 0; i < 3; i++) {
     const gs = s.gadgets[i];
     if (!gs || kinds.indexOf(gs.kind) < 0) continue;
-    if (!ready) return i as 0 | 1 | 2;
-    if (gs.cd <= 0 && (gs.uses > 0 || TOOLS.indexOf(gs.kind) >= 0)) return i as 0 | 1 | 2;
+    if (!ready) return i;
+    if (gs.cd <= 0 && (gs.uses > 0 || TOOLS.indexOf(gs.kind) >= 0)) return i;
   }
   return -1;
 }
@@ -429,4 +429,369 @@ function perceive(g: Game, s: Soldier, m: Mind): void {
   m.nVis = nVis;
   m.known = known;
   if (hurt && !m.vis) { m.threatYaw = s.lastHurtYaw; m.alertUntil = g.time + 2; }
+}
+
+// ───────────────────────── 조준·사격 ─────────────────────────
+
+const AIM = { yaw: 0, pitch: 0, dist: 0 };
+const turnRate = (g: Game): number => (g.opts.diff === 'easy' ? 5 : g.opts.diff === 'hard' ? 10 : 7.5);
+const turnGain = (g: Game): number => (g.opts.diff === 'easy' ? 9 : g.opts.diff === 'hard' ? 17 : 13);
+const leadSkill = (g: Game): number => (g.opts.diff === 'easy' ? 0.55 : g.opts.diff === 'hard' ? 1 : 0.85);
+const recoilComp = (g: Game): number => (g.opts.diff === 'easy' ? 0.2 : g.opts.diff === 'hard' ? 0.75 : 0.5);
+
+/** 저각 탄도 해: 수평 거리 dx, 높이 차 dy, 속도 v, 중력 gg */
+function ballistic(dx: number, dy: number, v: number, gg: number): number | null {
+  if (gg < 1e-3) return Math.atan2(dy, dx);
+  const v2 = v * v, disc = v2 * v2 - gg * (gg * dx * dx + 2 * dy * v2);
+  if (disc < 0) return null;
+  return Math.atan((v2 - Math.sqrt(disc)) / (gg * Math.max(0.1, dx)));
+}
+
+/** from 에서 tp(속도 tv)를 맞히는 yaw/pitch (앞지름·낙차) → AIM */
+function solve(from: Vec3, tp: Vec3, tv: Vec3 | null, vel: number, grav: number, lead: number): typeof AIM {
+  let dx = tp.x - from.x, dy = tp.y - from.y, dz = tp.z - from.z;
+  const v = Math.max(1, vel);
+  if (tv && lead > 0) {
+    let t = hyp(dx, dy, dz) / v;
+    for (let k = 0; k < 2; k++) {
+      const ex = dx + tv.x * t * lead, ez = dz + tv.z * t * lead, ey = dy + tv.y * t * lead * 0.5;
+      t = hyp(ex, ey, ez) / v;
+      if (k === 1) { dx = ex; dy = ey; dz = ez; }
+    }
+  }
+  const d = hyp(dx, dz);
+  AIM.yaw = Math.atan2(-dx, -dz);
+  let p = Math.atan2(dy, d);
+  if (grav > 0) { const b = ballistic(d, dy, v, 9.81 * grav); p = b !== null ? b : Math.max(p, 0.7); }
+  AIM.pitch = p;
+  AIM.dist = hyp(d, dy);
+  return AIM;
+}
+
+function lookAt(g: Game, m: Mind, dYaw: number, dPitch: number, rateMul: number, dt: number): void {
+  const ey = angleDiff(m.yaw, dYaw), ep = dPitch - m.pitch;
+  const k = damp(turnGain(g), dt), mx = turnRate(g) * rateMul * dt;
+  m.yaw = wrapAngle(m.yaw + clamp(ey * k, -mx, mx));
+  m.pitch = clamp(m.pitch + clamp(ep * k, -mx * 0.8, mx * 0.8), -1.4, 1.4);
+}
+
+function applyLook(g: Game, s: Soldier, m: Mind, c: Controls): void {
+  const w = s.weapons[s.cur];
+  const comp = s.held === 'weapon' && w ? recoilComp(g) : 0;
+  c.yaw = wrapAngle(m.yaw - (w ? w.kickY * comp : 0));
+  c.pitch = clamp(m.pitch - (w ? w.kickP * comp : 0), -1.45, 1.45);
+}
+
+/** 총 쏘기: 연발은 점사, 단발류는 눌렀다 떼기 */
+function gunFire(g: Game, s: Soldier, m: Mind, c: Controls, dist: number, onAim: boolean, dt: number): void {
+  const w = s.weapons[s.cur];
+  c.fire = false;
+  if (!w || !onAim || g.time < m.reactT || s.held !== 'weapon' || w.mag <= 0 || w.reloadT > 0 || s.swapT > 0) { m.burstT = 0; m.firePrev = false; return; }
+  const cat = w.st.cat;
+  if (cat === 'shotgun' && dist > 40) return;
+  if (cat === 'pistol' && dist > 75) return;
+  if ((cat === 'sniper' || cat === 'dmr') && dist > 25 && s.ads < 0.85) return;
+  if (dist > 22 && s.ads < 0.5 && cat !== 'shotgun') return; // 멀면 정조준부터
+  const easy = g.opts.diff === 'easy';
+  const interval = 60 / Math.max(1, w.st.rpm);
+  if (w.mode === 'auto') {
+    if (m.burstT > 0) {
+      c.fire = true; m.burstT -= dt;
+      if (m.burstT <= 0) m.pauseT = (0.2 + rnd(g) * 0.3) * (easy ? 1.7 : 1) * (dist > 40 ? 1.3 : 1);
+    } else if (m.pauseT > 0) m.pauseT -= dt;
+    else {
+      const n = dist > 70 ? 1 + Math.floor(rnd(g) * 2) : dist > 35 ? 2 + Math.floor(rnd(g) * 3) : 3 + Math.floor(rnd(g) * 6);
+      m.burstT = n * interval - dt * 0.5;
+      c.fire = true;
+    }
+  } else {
+    const gap = (w.mode === 'bolt' ? 0.2 : dist > 60 ? 0.34 : dist > 25 ? 0.2 : 0.11) * (easy ? 1.6 : 1);
+    if (m.firePrev) { m.firePrev = false; m.pulseT = g.time + gap + rnd(g) * 0.1; }
+    else if (g.time >= m.pulseT && w.fireT <= 0) { c.fire = true; m.firePrev = true; }
+  }
+}
+
+// ───────────────────────── 이동·경로 ─────────────────────────
+
+function moveDir(c: Controls, yaw: number, dx: number, dz: number, k: number): void {
+  const l = hyp(dx, dz);
+  if (l < 1e-4 || k <= 0) { c.mx = 0; c.mz = 0; return; }
+  dx /= l; dz /= l;
+  const f = forwardXZ(yaw), r = rightXZ(yaw);
+  c.mz = clamp((dx * f.x + dz * f.z) * k, -1, 1);
+  c.mx = clamp((dx * r.x + dz * r.z) * k, -1, 1);
+}
+
+function requestPath(g: Game, st: AIState, s: Soldier, m: Mind, gx: number, gz: number): void {
+  const nav = st.nav;
+  const key = cellOf(nav, gx, gz);
+  const ce = st.pcache.get(key);
+  m.pathT = g.time;
+  if (ce && g.time - ce.t < 12) {
+    let bi = -1, bd = 144;
+    const np = ce.pts.length >> 1;
+    for (let i = 0; i < np; i++) {
+      const d2 = (ce.pts[i * 2] - s.pos.x) ** 2 + (ce.pts[i * 2 + 1] - s.pos.z) ** 2;
+      if (d2 < bd) { bd = d2; bi = i; }
+    }
+    if (bi >= 0 && lineWalkable(nav, s.pos.x, s.pos.z, ce.pts[bi * 2], ce.pts[bi * 2 + 1])) {
+      m.path = ce.pts.slice(bi * 2); m.pi = 0; m.pgx = gx; m.pgz = gz; m.partial = false; m.repath = false;
+      return;
+    }
+  }
+  const r = findPath(nav, s.pos.x, s.pos.z, gx, gz, false, 4000);
+  if (!r) { m.pathT = g.time - 0.4; return; } // 이번 프레임 예산 소진: 곧 다시
+  m.path = r.pts; m.pi = 0; m.pgx = gx; m.pgz = gz; m.partial = r.partial; m.repath = false;
+  if (!r.partial && r.pts.length >= 6) {
+    st.pcache.set(key, { pts: r.pts, t: g.time });
+    if (st.pcache.size > 96) { const first = st.pcache.keys().next(); if (!first.done) st.pcache.delete(first.value); }
+  }
+}
+
+/** 목표점 (gx, gz) 쪽 경로를 따라가는 다음 경유점을 W 에 넣고, 목표까지 남은 직선 거리를 돌려준다 */
+const W = { x: 0, z: 0 };
+function pathStep(g: Game, st: AIState, s: Soldier, m: Mind, gx: number, gz: number, think: boolean): number {
+  const far = hyp(gx - s.pos.x, gz - s.pos.z);
+  if (think) {
+    const moved = hyp(gx - m.pgx, gz - m.pgz) > (far > 40 ? 6 : 2.5);
+    const atEnd = m.pi * 2 >= m.path.length;
+    if ((moved || m.repath || (atEnd && m.partial && far > 2) || m.path.length === 0) && (moved || g.time - m.pathT > 0.8)) {
+      if (far < 2.5) { m.path = [gx, gz]; m.pi = 0; m.pgx = gx; m.pgz = gz; m.partial = false; m.repath = false; }
+      else requestPath(g, st, s, m, gx, gz);
+    }
+  }
+  while (m.pi * 2 < m.path.length) {
+    const wx = m.path[m.pi * 2], wz = m.path[m.pi * 2 + 1];
+    const last = (m.pi + 1) * 2 >= m.path.length;
+    if (hyp(wx - s.pos.x, wz - s.pos.z) < (last ? 0.7 : 1.4)) { m.pi++; continue; }
+    break;
+  }
+  if (m.pi * 2 < m.path.length) { W.x = m.path[m.pi * 2]; W.z = m.path[m.pi * 2 + 1]; }
+  else if (m.partial || m.path.length === 0) { W.x = gx; W.z = gz; }
+  else { W.x = gx; W.z = gz; }
+  return far;
+}
+
+/** 막힘 감지: 2초에 0.5m 못 가면 점프·옆걸음 후 경로 다시 */
+function stuckCheck(g: Game, s: Soldier, m: Mind, c: Controls, wantMove: boolean, dt: number): void {
+  if (!wantMove) { m.stuckT = 0; m.spX = s.pos.x; m.spZ = s.pos.z; return; }
+  m.stuckT += dt;
+  if (m.stuckT < 2) return;
+  const moved = hyp(s.pos.x - m.spX, s.pos.z - m.spZ);
+  if (moved < 0.5) {
+    m.unstuckUntil = g.time + 0.7 + rnd(g) * 0.5;
+    m.unstuckDir = rnd(g) < 0.5 ? -1 : 1;
+    c.jump = true;
+    m.repath = true;
+    m.stuckN++;
+    if (m.stuckN >= 2 && m.pi * 2 < m.path.length) m.pi++;
+    if (m.stuckN >= 4) { m.hasHold = false; m.stuckN = 0; }
+  } else m.stuckN = 0;
+  m.stuckT = 0; m.spX = s.pos.x; m.spZ = s.pos.z;
+}
+
+function friendNear(g: Game, s: Soldier, p: Vec3, r: number): boolean {
+  const r2 = r * r;
+  for (const o of g.soldiers) {
+    if (o.team !== s.team || o.state === 'dead') continue;
+    if ((o.pos.x - p.x) ** 2 + (o.pos.z - p.z) ** 2 < r2) return true;
+  }
+  return false;
+}
+
+// ───────────────────────── 장비 쓰기 ─────────────────────────
+
+function startUse(g: Game, s: Soldier, m: Mind, slotN: number, aim: Vec3 | null,
+  o: { pitch?: number; hold?: boolean; ads?: boolean; dur?: number; targetV?: number } = {}): void {
+  const slot = slotN as 0 | 1 | 2;
+  const gs = s.gadgets[slot];
+  if (!gs) return;
+  const k = gs.kind;
+  const thrown = slot === 2 || THROWN.indexOf(k) >= 0;
+  const vel = gs.params.velocity ?? (thrown ? 18 : k === 'rocket' ? 80 : k === 'ugl' ? 75 : 60);
+  const grav = thrown ? 1 : k === 'rocket' ? 0.25 : k === 'ugl' ? 1 : k === 'aa' ? 0.15 : 0;
+  m.use = {
+    slot, kind: k, until: g.time + (o.dur ?? 4), aim: aim ? { x: aim.x, y: aim.y, z: aim.z } : null,
+    pitch: o.pitch ?? null, vel, grav, hold: !!o.hold, ads: !!o.ads, thrown, uses0: gs.uses, pressT: 0, fired: false,
+    targetV: o.targetV ?? -1,
+  };
+  m.burstT = 0;
+}
+
+function endUse(s: Soldier, m: Mind, c: Controls): void {
+  m.use = null;
+  c.fire = false; m.firePrev = false;
+  if (s.held === 'gadget') c.switchTo = s.cur;
+}
+
+/** 진행 중인 장비 사용. 이번 틱 조준·사격을 맡았으면 true */
+function runUse(g: Game, s: Soldier, m: Mind, c: Controls, dt: number): boolean {
+  const u = m.use;
+  if (!u) return false;
+  const gs = s.gadgets[u.slot];
+  if (!gs || gs.kind !== u.kind || g.time > u.until) { endUse(s, m, c); return false; }
+  const eye = eyePos(s);
+  let dy = m.yaw, dp = m.pitch;
+  let tv: Vec3 | null = null;
+  if (u.targetV >= 0) {
+    const v = g.vehicles[u.targetV];
+    if (!v || !v.alive) { endUse(s, m, c); return false; }
+    const def = vehDef(v);
+    u.aim = u.aim ?? tmpV();
+    u.aim.x = v.pos.x; u.aim.y = v.pos.y + (def ? def.size.y * 0.45 : 1); u.aim.z = v.pos.z;
+    tv = v.vel;
+  }
+  if (u.aim) {
+    const a = solve(eye, u.aim, tv, u.vel, u.grav, u.kind === 'aa' ? 0.3 : leadSkill(g));
+    dy = a.yaw; dp = u.thrown ? a.pitch - 0.12 : a.pitch;
+  }
+  if (u.pitch !== null) dp = u.pitch;
+  lookAt(g, m, dy, dp, 1.2, dt);
+  const err = Math.abs(angleDiff(m.yaw, dy)) + Math.abs(dp - m.pitch);
+  c.ads = u.ads;
+  c.sprint = false;
+  if (u.thrown) {
+    // 투척물은 장비 키를 누르는 순간 지금 시선으로 던진다
+    c.fire = false;
+    if (gs.uses < u.uses0) { m.use = null; return true; }
+    if (err < 0.06 && g.time > u.pressT && s.swapT <= 0) { c.gadget = u.slot; u.pressT = g.time + 0.5; }
+    return true;
+  }
+  if (s.held !== 'gadget' || s.heldGadget !== u.slot) {
+    if (u.fired) { m.use = null; return false; }
+    c.fire = false;
+    if (g.time > u.pressT) { c.gadget = u.slot; u.pressT = g.time + 0.8; }
+    return true;
+  }
+  const ready = s.swapT <= 0 && gs.cd <= 0;
+  if (u.hold) {
+    c.fire = ready && err < 0.2;
+    return true;
+  }
+  if (u.fired || gs.uses < u.uses0 || (m.firePrev && gs.cd > 0)) {
+    u.fired = true;
+    endUse(s, m, c);
+    return true;
+  }
+  const adsOk = !u.ads || s.ads > 0.75;
+  const lockOk = u.kind !== 'aa' || gs.active >= 1;
+  const tol = u.kind === 'rocket' ? 0.03 : u.kind === 'aa' ? 0.08 : 0.07;
+  if (ready && adsOk && lockOk && err < tol) {
+    if (!m.firePrev) { c.fire = true; m.firePrev = true; } else { c.fire = false; m.firePrev = false; }
+  } else { c.fire = false; m.firePrev = false; }
+  return true;
+}
+
+/** 생각할 때 병과별 장비 쓰기 결정 */
+function classActs(g: Game, st: AIState, s: Soldier, m: Mind): void {
+  if (m.use || s.vehicle >= 0) return;
+  const t = m.tgt >= 0 ? g.soldiers[m.tgt] : null;
+  const dT = t ? hyp(t.pos.x - s.pos.x, t.pos.z - s.pos.z) : 1e9;
+  // 아드레날린
+  if (s.hp < 45 && g.time > m.stimT) {
+    m.stimT = g.time + 4;
+    const k = slotOf(s, ['stim']);
+    if (k >= 0) { startUse(g, s, m, k, null, { dur: 2 }); return; }
+  }
+  // 대전차·대공
+  if (m.visV >= 0 && dT > 14) {
+    const v = g.vehicles[m.visV], def = v ? vehDef(v) : undefined;
+    if (v && def) {
+      if (def.air) {
+        const k = slotOf(s, ['aa']);
+        if (k >= 0 && m.visVD < (s.gadgets[k].params.range ?? 420)) { startUse(g, s, m, k, null, { ads: true, dur: 6, targetV: v.id }); return; }
+      } else {
+        const k = slotOf(s, ['rocket']);
+        if (k >= 0 && m.visVD < 130 && m.visVD > 7) { startUse(g, s, m, k, null, { ads: true, dur: 4, targetV: v.id }); return; }
+      }
+    }
+  }
+  // 수류탄: 엄폐 뒤 적이나 무리
+  if (t && g.time > m.nadeT && dT > 8 && dT < 30) {
+    const hidden = !m.vis && g.time - m.seenT < 3.5;
+    if (hidden || (m.cluster >= 1 && rnd(g) < 0.6)) {
+      const k = slotOf(s, ['frag', 'impact', 'incendiary', 'flash']);
+      if (k >= 0 && !friendNear(g, s, m.lk, 7)) {
+        const aim = { x: m.lk.x, y: m.lk.y - 1, z: m.lk.z };
+        startUse(g, s, m, k, aim, { dur: 1.8 });
+        m.nadeT = g.time + 16 + rnd(g) * 10;
+        return;
+      }
+    }
+    m.nadeT = g.time + 3;
+  }
+  // 유탄
+  if (t && g.time > m.uglT && dT > 15 && dT < 90 && (m.cluster >= 1 || (!m.vis && g.time - m.seenT < 3))) {
+    m.uglT = g.time + 9 + rnd(g) * 8;
+    const k = slotOf(s, ['ugl']);
+    if (k >= 0 && !friendNear(g, s, m.lk, 6)) {
+      const aim = { x: m.lk.x, y: m.lk.y - 0.8, z: m.lk.z };
+      startUse(g, s, m, k, aim, { dur: 2.5 });
+      return;
+    }
+  }
+  if (m.vis || g.time - m.seenT < 2) return;
+  // 조용할 때
+  const fwdDown = -0.55;
+  if (s.cls === 'support') {
+    if (g.time > m.bagT) {
+      m.bagT = g.time + 8;
+      let hurt = 0, n = 0;
+      for (const o of g.soldiers) {
+        if (o.team !== s.team || o.state !== 'alive' || o.vehicle >= 0) continue;
+        if ((o.pos.x - s.pos.x) ** 2 + (o.pos.z - s.pos.z) ** 2 > 225) continue;
+        n++; if (o.hp < o.maxHp * 0.7) hurt++;
+      }
+      if (hurt >= 1 && (hurt >= 2 || s.hp < s.maxHp * 0.7)) {
+        const k = slotOf(s, ['medbag']);
+        if (k >= 0) { startUse(g, s, m, k, null, { pitch: fwdDown, dur: 2.5 }); m.bagT = g.time + 25 + rnd(g) * 10; return; }
+      }
+      if (g.time > m.ammoT && n >= 2) {
+        let low = 0;
+        for (const o of g.soldiers) {
+          if (o.team !== s.team || o.state !== 'alive' || o.vehicle >= 0) continue;
+          if ((o.pos.x - s.pos.x) ** 2 + (o.pos.z - s.pos.z) ** 2 > 225) continue;
+          const w = o.weapons[0];
+          if (w && w.reserve < w.st.mag * 1.5) low++;
+        }
+        const k = slotOf(s, ['ammobag']);
+        if (k >= 0 && (low >= 1 || rnd(g) < 0.2)) { startUse(g, s, m, k, null, { pitch: fwdDown, dur: 2.5 }); m.ammoT = g.time + 45 + rnd(g) * 20; return; }
+        m.ammoT = g.time + 10;
+      }
+    }
+    if (m.task === 'hold' && !m.coverPlaced && rnd(g) < 0.08) {
+      const k = slotOf(s, ['cover']);
+      if (k >= 0) { m.coverPlaced = true; startUse(g, s, m, k, null, { pitch: -0.35, dur: 2.5 }); return; }
+    }
+  } else if (s.cls === 'recon') {
+    const o = orderOf(g, st, s), f = g.flags[o.flag];
+    const dF = f ? hyp(f.pos.x - s.pos.x, f.pos.z - s.pos.z) : 1e9;
+    if (!m.beacon && dF < 90 && dF > 25) {
+      const k = slotOf(s, ['beacon']);
+      if (k >= 0) { m.beacon = true; startUse(g, s, m, k, null, { pitch: fwdDown, dur: 2.5 }); return; }
+      m.beacon = true;
+    }
+    if (f && g.time > m.droneT && dF < 160) {
+      m.droneT = g.time + 40 + rnd(g) * 25;
+      const k = slotOf(s, ['drone']);
+      if (k >= 0) { startUse(g, s, m, k, { x: f.pos.x, y: f.pos.y + 1, z: f.pos.z }, { dur: 2.5 }); return; }
+    }
+    if (f && g.time > m.sensorT && dF < 35) {
+      m.sensorT = g.time + 35 + rnd(g) * 20;
+      const k = slotOf(s, ['sensor']);
+      if (k >= 0) { startUse(g, s, m, k, { x: f.pos.x, y: f.pos.y, z: f.pos.z }, { dur: 2.5, pitch: dF < 20 ? fwdDown : undefined }); return; }
+    }
+    if (m.task === 'hold' && !m.clay) {
+      const k = slotOf(s, ['claymore']);
+      m.clay = true;
+      if (k >= 0) { startUse(g, s, m, k, null, { pitch: fwdDown, dur: 2.5 }); return; }
+    }
+  } else if (s.cls === 'engineer') {
+    const o = orderOf(g, st, s), f = g.flags[o.flag];
+    if (!m.mine && o.defend && f && hyp(f.pos.x - s.pos.x, f.pos.z - s.pos.z) < f.r + 30 && rnd(g) < 0.15) {
+      m.mine = true;
+      const k = slotOf(s, ['atmine']);
+      if (k >= 0) { startUse(g, s, m, k, null, { pitch: fwdDown, dur: 2.5 }); return; }
+    }
+  }
 }

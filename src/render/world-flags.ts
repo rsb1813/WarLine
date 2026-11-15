@@ -27,6 +27,7 @@ export class FlagLayer {
   private s = new THREE.Vector3(1, 1, 1);
   private white = new THREE.Color(0.92, 0.92, 0.9);
   private tc = new THREE.Color();
+  private first = true;
 
   constructor(w: World, sh: SharedUniforms) {
     this.windYaw = (w.def.seed % 360) * Math.PI / 180;
@@ -80,7 +81,8 @@ export class FlagLayer {
 
   update(g: Game, dt: number): void {
     if (!this.cloth) return;
-    const k = 1 - Math.exp(-dt * 3);
+    const k = this.first ? 1 : 1 - Math.exp(-dt * 3);
+    this.first = false;
     for (const f of g.flags) {
       const i = this.ids.get(f.id);
       if (i === undefined) continue;

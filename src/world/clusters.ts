@@ -398,7 +398,12 @@ export function village(G: Gen, v: Village): void {
     wreck(G, x, z, v.axis === 0);
   }
   for (let i = 0; i < 3; i++) { const [px, pz] = aroundPoint(G, v.x, v.z, 6, half + 10); if (G.r() < 0.5) crates(G, px, pz); else sandbagWall(G, px, pz, 3.6, G.r() < 0.5); }
-  if (ind) { const [yx, yz] = aroundPoint(G, v.x, v.z, half * 0.5, half + 18); containerYard(G, yx, yz, 2, 2); }
+  if (ind) {
+    const [yx, yz] = aroundPoint(G, v.x, v.z, half * 0.5, half + 18);
+    containerYard(G, yx, yz, 2, 2);
+    const [tx, tz] = aroundPoint(G, v.x, v.z, half * 0.4, half + 20);
+    for (let i = 0; i < 2; i++) fuelTank(G, tx + i * 9, tz, rr(G, 5, 7));
+  }
 }
 
 /** 길가 외딴 건물 (헛간, 집, 감시탑) */

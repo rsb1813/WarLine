@@ -201,7 +201,7 @@ function genSiding(): THREE.DataTexture {
     const bid = ih(wrapI(b, N), 0, 31);
     const lip = sstep(0.0, 0.06, fy);
     const grain = Math.sin((fy * 7 + tnoise(u * 12, v * N * 2, 12, N * 2, 33) * 5) * 6.283) * 0.5 + 0.5;
-    const peel = sstep(0.7, 0.75, tfbm(u, v, 10, 10, 5, 35) + (1 - v) * 0.04) * (0.6 + 0.4 * tnoise(u * 40, v * 40, 40, 40, 36));
+    const peel = sstep(0.66, 0.72, tfbm(u, v, 3, N * 2, 4, 35) * 0.75 + tfbm(u, v, 6, 6, 3, 36) * 0.25 + (0.3 - fy) * 0.15);
     // 판자 이음(세로 줄) 몇 군데
     const jx = fract(u * 3 + bid * 0.7);
     const joint = 1 - sstep(0.0, 0.006, Math.min(jx, 1 - jx));
@@ -312,38 +312,44 @@ function genShingles(): THREE.DataTexture {
   });
 }
 
-/** 모래주머니: 30 cm 줄 4개 / 1.2 m, 한 줄에 2개 엇갈림 */
+/** 모래주머니: 15 cm 줄 8개 / 1.2 m, 한 줄에 2개(줄마다 어긋남·길이 차이) */
 function genSandbag(): THREE.DataTexture {
-  const S = 256, R = 4, C = 2;
+  const S = 256, R = 8, C = 2;
   return packTexture(S, S, (u, v, o, i, j) => {
     const ry = v * R, r = Math.floor(ry), fy = ry - r;
-    const rx = u * C + (r & 1) * 0.5, c = Math.floor(rx), fx = rx - c;
-    const id = ih(wrapI(c, C), wrapI(r, R), 111);
-    const ex = (fx - 0.5) * 2, ey = (fy - 0.5) * 2;
-    const d = Math.pow(Math.abs(ex), 3) * 0.9 + ey * ey;
+    const rw = wrapI(r, R);
+    const rx = u * C + ih(rw, 3, 117) * 0.9, c = Math.floor(rx);
+    let fx = rx - c;
+    const id = ih(wrapI(c, C), rw, 111);
+    fx = (fx - 0.5) * (0.92 + id * 0.12) + 0.5;
+    const ex = (fx - 0.5) * 2, ey = (fy - 0.5 + (id - 0.5) * 0.12) * 2;
+    const d = Math.pow(Math.abs(ex), 4) * 0.9 + ey * ey * 1.05;
     const pil = Math.sqrt(Math.max(0, 1 - d));
-    const gap = 1 - sstep(0.0, 0.3, pil);
+    const gap = 1 - sstep(0.0, 0.22, pil);
     const weave = ((i + j) & 1) * 0.5 + ((i - j) & 2) * 0.25;
-    const fold = Math.max(0, Math.sin(fy * 40 + id * 6)) * sstep(0.35, 0.48, Math.abs(fx - 0.5));
-    o[0] = 0.42 + id * 0.14 + pil * 0.12 + (weave - 0.4) * 0.05 - fold * 0.06;
-    o[1] = gap;
-    o[2] = sstep(0.5, 0.85, tfbm(u, v, 4, 4, 4, 113)) * 0.7;
-    o[3] = pil * 0.85 + weave * 0.03 - fold * 0.05;
+    const fold = Math.max(0, Math.sin(fx * 70 + id * 9)) * sstep(0.3, 0.46, Math.abs(fx - 0.5)) * 0.6;
+    const n = tfbm(u, v, 8, 8, 4, 115);
+    o[0] = 0.47 + (id - 0.5) * 0.12 + pil * 0.08 + (weave - 0.4) * 0.05 - fold * 0.08 + (n - 0.5) * 0.12;
+    o[1] = gap * 0.75;
+    o[2] = clamp01(sstep(0.5, 0.85, tfbm(u, v, 4, 4, 4, 113)) * 0.7 + (1 - pil) * 0.25);
+    o[3] = pil * 0.8 + weave * 0.03 - fold * 0.05 + n * 0.1;
   });
 }
 
-/** 바위: 갈라진 틈, 층리, 이끼(지의류) */
+/** 바위: 가는 틈, 층리, 드문 지의류 */
 function genRock(): THREE.DataTexture {
   const S = 256;
   return packTexture(S, S, (u, v, o) => {
-    const c = tcell(u, v, 6, 121);
-    const crack = 1 - sstep(0.0, 0.07, c.f2 - c.f1);
+    const c = tcell(u, v, 4, 121);
+    const crackN = tfbm(u, v, 12, 12, 3, 129);
+    const crack = (1 - sstep(0.0, 0.025, c.f2 - c.f1)) * sstep(0.45, 0.6, crackN);
     const fb = tfbm(u, v, 5, 5, 6, 123);
-    const strata = Math.sin((v * 6 + fb * 3) * 6.283) * 0.5 + 0.5;
-    o[0] = 0.42 + (fb - 0.5) * 0.42 + (strata - 0.5) * 0.08 + (c.id - 0.5) * 0.1 - crack * 0.2;
-    o[1] = sstep(0.6, 0.68, tfbm(u, v, 10, 10, 4, 125)) * (1 - crack);
+    const fine = tnoise(u * 96, v * 96, 96, 96, 124);
+    const strata = Math.sin((v * 5 + fb * 2.5) * 6.283) * 0.5 + 0.5;
+    o[0] = 0.44 + (fb - 0.5) * 0.4 + (strata - 0.5) * 0.07 + (fine - 0.5) * 0.12 - crack * 0.22;
+    o[1] = sstep(0.66, 0.72, tfbm(u, v, 12, 12, 4, 125)) * (1 - crack) * 0.7;
     o[2] = sstep(0.55, 0.8, tfbm(u, v, 3, 3, 4, 127)) * 0.7;
-    o[3] = fb * 0.7 + 0.3 - crack * 0.45;
+    o[3] = fb * 0.6 + fine * 0.2 + 0.2 - crack * 0.4;
   });
 }
 
@@ -374,7 +380,7 @@ function genPlate(): THREE.DataTexture {
     const near = 1 - sstep(0.02, 0.06, ds);
     const bx = fract(u * 20), by = fract(v * 20);
     const bolt = near * (1 - sstep(0.12, 0.2, Math.hypot(bx - 0.5, by - 0.5))) * (ds > 0.015 && ds < 0.04 ? 1 : 0);
-    const chip = clamp01(sstep(0.68, 0.74, tfbm(u, v, 12, 12, 5, 141)) + near * sstep(0.55, 0.65, tfbm(u, v, 20, 20, 3, 143)));
+    const chip = clamp01(sstep(0.74, 0.8, tfbm(u, v, 16, 16, 5, 141)) * 0.8 + near * sstep(0.62, 0.72, tfbm(u, v, 24, 24, 3, 143)) * 0.7);
     o[0] = 0.5 + (tfbm(u, v, 4, 4, 3, 145) - 0.5) * 0.1 - seam * 0.15 + bolt * 0.1;
     o[1] = chip;
     o[2] = sstep(0.55, 0.85, tfbm(u, v, 24, 2, 3, 147)) * 0.6;
@@ -575,7 +581,7 @@ export function roadTex(): THREE.CanvasTexture {
         const u = (i + 0.5) / W;
         const n = tfbm(u, v, 8, 16, 4, 301);
         const sp = ih(i, j, 303);
-        let r = 56 + (n - 0.5) * 22 + (sp - 0.5) * 18;
+        let r = 66 + (n - 0.5) * 22 + (sp - 0.5) * 18;
         let gg = r + 2, b = r + 5;
         // 바퀴 자국(어둡고 매끈), 자국 사이 눈 진창
         const track = Math.max(1 - sstep(0.0, 0.06, Math.abs(u - 0.3)), 1 - sstep(0.0, 0.06, Math.abs(u - 0.7)));

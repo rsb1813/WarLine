@@ -20,7 +20,7 @@ const base = (o: Partial<BoxMatOpts> & Pick<BoxMatOpts, 'side' | 'top'>): BoxMat
 });
 
 const CONCRETE = base({ side: 'concrete', top: 'concreteTop', sideTile: [6, 6], topTile: [6, 6], second: 0x4a4a48, grime: 0x37332f, grimeAmt: 0.7, rough: 0.93, bump: 1.2 });
-const STONE = base({ side: 'rock', top: 'rock', sideTile: [4, 4], topTile: [4, 4], second: 0x8f8c5e, grime: 0x2c2b28, grimeAmt: 0.5, bump: 2.2, drift: 0.6 });
+const STONE = base({ side: 'rock', top: 'rock', sideTile: [4, 4], topTile: [4, 4], second: 0x8a8a74, grime: 0x2c2b28, grimeAmt: 0.5, bump: 2.2, drift: 0.6 });
 const FOLIAGE = base({ side: 'foliage', top: 'foliage', second: 0x223322, grime: 0x16221a, grimeAmt: 0.5, rough: 0.95, bump: 2.6, snow: 1.1, drift: 0.6 });
 
 const CLASSES: Record<ClassKey, ClassDef> = {
@@ -34,7 +34,7 @@ const CLASSES: Record<ClassKey, ClassDef> = {
   rooftar: { geo: 'box', mat: base({ side: 'concrete', top: 'tar', sideTile: [6, 6], topTile: [4, 4], second: 0x4a4a48, grime: 0x262628, grimeAmt: 0.5, rough: 0.9, bump: 1.0, snow: 1.2, drift: 0 }), cast: true, spare: 16 },
   roofwood: { geo: 'box', mat: base({ side: 'siding', top: 'shingles', second: 0x58504a, grime: 0x2a2622, grimeAmt: 0.4, rough: 0.88, bump: 1.5, snow: 1.2, drift: 0 }), cast: true, spare: 16 },
   container: { geo: 'box', mat: base({ side: 'container', top: 'roofmetal', sideTile: [2.4, 1], uvMode: 2, second: 0x5a3220, grime: 0x3e3430, grimeAmt: 0.45, rough: 0.55, metal: 0.35, bump: 1.6, snow: 1.1, drift: 0.6 }), cast: true, spare: 8 },
-  sandbag: { geo: 'box', mat: base({ side: 'sandbag', top: 'sandbag', sideTile: [1.2, 1.2], topTile: [1.2, 1.2], second: 0x2e2a22, grime: 0x4a4030, grimeAmt: 0.4, rough: 0.96, bump: 2.4 }), cast: true, spare: 16 },
+  sandbag: { geo: 'box', mat: base({ side: 'sandbag', top: 'sandbag', sideTile: [1.2, 1.2], topTile: [1.2, 1.2], second: 0x4a4234, grime: 0x4a4030, grimeAmt: 0.4, rough: 0.96, bump: 2.4 }), cast: true, spare: 16 },
   crate: { geo: 'box', mat: base({ side: 'crate', top: 'crate', sideTile: [1, 1], topTile: [1, 1], uvMode: 1, second: 0x241e1a, grime: 0x3a3028, grimeAmt: 0.35, rough: 0.86, bump: 1.6, drift: 0.5 }), cast: true, spare: 16 },
   metalprop: { geo: 'box', mat: base({ side: 'plate', top: 'plate', second: 0x6e4a32, grime: 0x3a342e, grimeAmt: 0.45, rough: 0.5, metal: 0.5, bump: 1.0, drift: 0.6 }), cast: true, spare: 16 },
   fencewood: { geo: 'box', mat: base({ side: 'picket', top: 'picket', sideTile: [2, 1], uvMode: 2, second: 0x8a8070, grime: 0x3a342c, grimeAmt: 0.4, alphaCut: true, snow: 0.6, drift: 0.8 }), cast: false, spare: 8 },
@@ -84,7 +84,8 @@ function lumpGeometry(detail: number, rough: number, flatBottom: number, seed: n
   for (let i = 0; i < p.count; i++) {
     let x = p.getX(i), y = p.getY(i), z = p.getZ(i);
     const h = hash2(Math.round(x * 1000) + Math.round(z * 777), Math.round(y * 1000), seed);
-    const k = 1 - rough * 0.5 + rough * h;
+    const low = Math.sin(x * 5.1 + seed) * Math.cos(z * 4.3 - seed * 0.7) + Math.sin(y * 6.2 + x * 2.1 + seed * 1.3) * 0.6;
+    const k = 1 - rough * 0.5 + rough * (h * 0.45 + 0.55 * (0.5 + 0.35 * low));
     x *= k; y *= k; z *= k;
     if (y < -flatBottom) y = -flatBottom + (y + flatBottom) * 0.25;
     p.setXYZ(i, x, y, z);
@@ -100,7 +101,7 @@ function lumpGeometry(detail: number, rough: number, flatBottom: number, seed: n
 }
 
 function makeGeometry(kind: GeoKind): THREE.BufferGeometry {
-  if (kind === 'blob') return lumpGeometry(1, 0.38, 0.22, 3);
+  if (kind === 'blob') return lumpGeometry(1, 0.55, 0.2, 3);
   if (kind === 'chunk') return lumpGeometry(0, 0.55, 0.15, 9);
   const g = new THREE.BoxGeometry(1, 1, 1);
   if (kind === 'box') g.deleteAttribute('uv');
