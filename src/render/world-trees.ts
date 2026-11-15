@@ -147,13 +147,16 @@ export class TreeLayer {
     const foliageGeo = pineGeometry(snowAmt, w.def.seed + 5);
     const trunkGeo = new THREE.CylinderGeometry(0.55, 1, 1, 7, 1, true).translate(0, 0.5, 0);
     const branchGeo = branchGeometry(w.def.seed + 9, 9);
-    const crownGeo = new THREE.IcosahedronGeometry(1, 1);
+    // 자작나무 수관: 세로 판 3장을 60도씩 엇갈려 세운다 (실루엣 텍스처)
+    const crownParts = [0, 1, 2].map((k) => new THREE.PlaneGeometry(2, 1).translate(0, 0.5, 0).rotateY((k * Math.PI) / 3));
+    const crownGeo = mergeGeometries(crownParts) as THREE.BufferGeometry;
+    crownParts.forEach((p) => p.dispose());
     const foliageMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0 });
     addSway(foliageMat, sh, 0.035, 'pine');
     const trunkMat = new THREE.MeshStandardMaterial({ map: barkTex(), roughness: 0.95, metalness: 0 });
     const branchMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, metalness: 0 });
     addSway(branchMat, sh, 0.02, 'branch');
-    const crownMat = new THREE.MeshStandardMaterial({ map: twigTex(), alphaTest: 0.4, roughness: 0.95, metalness: 0, side: THREE.DoubleSide, color: 0x6a5856 });
+    const crownMat = new THREE.MeshStandardMaterial({ map: twigTex(), alphaTest: 0.35, roughness: 0.95, metalness: 0, side: THREE.DoubleSide, color: 0x8a7470 });
     addSway(crownMat, sh, 0.03, 'crown');
     const defs: [Part, THREE.BufferGeometry, THREE.Material, boolean][] = [
       ['foliage', foliageGeo, foliageMat, true],
@@ -194,7 +197,7 @@ export class TreeLayer {
         const tr = 0.08 + r * 0.035;
         add('trunk', 0, tr, h * 0.94, tr, c.setHex(TRUNK_COL.birch).multiplyScalar(0.92 + h2 * 0.08));
         add('branch', 0, r * 0.85, h, r * 0.85, c.setHex(BRANCH_COL.birch));
-        add('crown', h * 0.64, r, h * 0.42, r, c.setRGB(0.85 + h2 * 0.3, 0.85 + h2 * 0.2, 0.85 + h1 * 0.2));
+        add('crown', h * 0.3, r * 1.05, h * 0.72, r * 1.05, c.setRGB(0.85 + h2 * 0.3, 0.85 + h2 * 0.2, 0.85 + h1 * 0.2));
       } else {
         const tr = 0.09 + r * 0.04;
         add('trunk', 0, tr, h * 0.86, tr, c.setHex(TRUNK_COL.dead).multiplyScalar(0.85 + h2 * 0.25));

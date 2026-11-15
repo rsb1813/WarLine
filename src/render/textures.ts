@@ -521,7 +521,7 @@ export function barkTex(): THREE.DataTexture {
   }));
 }
 
-/** 겨울 자작나무 잔가지 덩어리 (알파 = 덮임, 캔버스에 갈라지는 가지를 그린다) */
+/** 겨울 자작나무 수관 실루엣 (알파 = 덮임). 아래 가운데에서 갈라져 올라가는 가지 */
 export function twigTex(): THREE.CanvasTexture {
   return cached('twigs', () => {
     const S = 256;
@@ -530,25 +530,32 @@ export function twigTex(): THREE.CanvasTexture {
     let k = 0;
     const rnd = () => ih(k++, 7, 251);
     g.lineCap = 'round';
-    const limb = (x: number, y: number, a: number, len: number, wdt: number, depth: number) => {
+    const limb = (x: number, y: number, a: number, len: number, wdt: number, depth: number): void => {
       const x2 = x + Math.cos(a) * len, y2 = y + Math.sin(a) * len;
-      const l = 150 + rnd() * 70;
-      g.strokeStyle = `rgb(${l},${l * 0.9},${l * 0.88})`;
+      const l = 120 + rnd() * 60;
+      g.strokeStyle = `rgb(${l},${l * 0.88},${l * 0.86})`;
       g.lineWidth = wdt;
       g.beginPath(); g.moveTo(x, y); g.lineTo(x2, y2); g.stroke();
-      // 가장자리 넘어가면 반대편에도 (반복 텍스처)
-      for (const [ox, oy] of [[S, 0], [-S, 0], [0, S], [0, -S]]) {
-        if (Math.min(x, x2) + ox < S && Math.max(x, x2) + ox > 0 && Math.min(y, y2) + oy < S && Math.max(y, y2) + oy > 0 && (ox || oy)) {
-          g.beginPath(); g.moveTo(x + ox, y + oy); g.lineTo(x2 + ox, y2 + oy); g.stroke();
-        }
-      }
       if (depth <= 0) return;
-      const n = 2 + Math.floor(rnd() * 2);
-      for (let i = 0; i < n; i++) limb(x2, y2, a + (rnd() - 0.5) * 1.4, len * (0.55 + rnd() * 0.2), Math.max(0.6, wdt * 0.62), depth - 1);
+      const n = depth > 2 ? 2 : 3;
+      for (let i = 0; i < n; i++) {
+        // 위로 휘는 경향 + 바깥으로 퍼짐
+        const na = a + (rnd() - 0.5) * 1.1 + (-Math.PI / 2 - a) * 0.15;
+        limb(x2, y2, na, len * (0.62 + rnd() * 0.18), Math.max(0.55, wdt * 0.62), depth - 1);
+      }
     };
-    for (let i = 0; i < 26; i++) limb(rnd() * S, rnd() * S, -Math.PI / 2 + (rnd() - 0.5) * 1.6, 26 + rnd() * 22, 2.2, 4);
-    const t = canvasTex(c);
-    t.colorSpace = THREE.SRGBColorSpace;
+    // 줄기 (위쪽만: 아래는 진짜 줄기 모델이 있다)
+    g.strokeStyle = 'rgb(200,196,190)';
+    g.lineWidth = 3;
+    g.beginPath(); g.moveTo(S / 2, S); g.lineTo(S / 2, S * 0.12); g.stroke();
+    for (let i = 0; i < 16; i++) {
+      const y = S * (0.95 - 0.78 * (i / 16));
+      const side = i % 2 ? 1 : -1;
+      const a = -Math.PI / 2 + side * (0.45 + rnd() * 0.5);
+      limb(S / 2, y, a, S * (0.14 + 0.1 * Math.sin((i / 16) * Math.PI)), 2.2, 5);
+    }
+    const t = canvasTex(c, false);
+    t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
     return t;
   });
 }
