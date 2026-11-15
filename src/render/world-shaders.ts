@@ -194,7 +194,7 @@ vec4 wd1 = texture2D(uDetail, wlP * 0.21);
 vec4 wd2 = texture2D(uDetail, wlP * 0.031 + vec2(0.37, 0.71));
 vec4 wd3 = texture2D(uDetail, wlP * 0.93 + vec2(0.13, 0.52));
 float wlDist = length(vViewPosition);
-float wlNear = 1.0 - smoothstep(25.0, 90.0, wlDist);
+float wlNear = 1.0 - smoothstep(14.0, 65.0, wlDist);
 vec4 wlGw = vGround / max(vGround.x + vGround.y + vGround.z + vGround.w, 1e-3);
 float wlMacro = wd2.g;
 {
@@ -202,7 +202,7 @@ float wlMacro = wd2.g;
   vec3 mVeg = mix(vec3(0.6, 0.58, 0.52), vec3(1.25, 1.12, 0.95), wd1.r) * (0.72 + 0.56 * mix(0.5, wd3.g, wlNear)) * (0.8 + 0.4 * wlMacro);
   float crack = 1.0 - smoothstep(0.0, 0.07, wd2.b);
   float mHard = (0.86 + 0.24 * wd1.r + 0.14 * (wd3.r - 0.5) * wlNear) * (1.0 - 0.32 * crack) * (0.9 + 0.2 * wlMacro);
-  float mRough = (0.72 + 0.5 * mix(0.5, wd3.b, wlNear)) * (0.85 + 0.3 * wd1.r) * (0.85 + 0.3 * wlMacro);
+  float mRough = (0.78 + 0.38 * mix(0.5, wd3.b, wlNear)) * (0.85 + 0.3 * wd1.r) * (0.85 + 0.3 * wlMacro);
   diffuseColor.rgb *= wlGw.x * mSnow + wlGw.y * mVeg + wlGw.z * mHard + wlGw.w * mRough;
   float speck = wlGw.y * smoothstep(0.5 + wlMacro * 0.25, 0.64 + wlMacro * 0.25, wd1.r * 0.55 + mix(0.5, wd3.g, wlNear) * 0.45) * 0.75;
   diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.84, 0.88, 0.93), speck);

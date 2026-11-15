@@ -67,7 +67,7 @@ function classOf(b: Box): ClassKey | null {
   if (b.kind === 'prop' && b.mat === 'metal') {
     const dx = b.max.x - b.min.x, dy = b.max.y - b.min.y, dz = b.max.z - b.min.z;
     // 네모 바닥의 큰 금속 소품 = 저장 탱크, 가늘고 긴 것 = 배관
-    if (dx >= 1.5 && Math.abs(dx - dz) < dx * 0.06 && dy >= 0.4) return 'tank';
+    if (dx >= 2.5 && Math.abs(dx - dz) < dx * 0.06 && dy >= 0.4) return 'tank';
     if (dy <= 1.3 && Math.max(dx, dz) >= 3 * Math.min(dx, dz) && Math.min(dx, dz) <= 1.4) return 'pipe';
   }
   switch (b.mat) {
@@ -246,7 +246,7 @@ export class BoxLayer {
       const swap = rot & 1;
       const sx = (swap ? dz : dx) * 1.14, sz = (swap ? dx : dz) * 1.14;
       this.tmpQ.setFromAxisAngle(this.tmpV.set(0, 1, 0), rot * Math.PI / 2);
-      const m = new THREE.Matrix4().compose(this.tmpV.set(cx, cy - dy * 0.04, cz), this.tmpQ, this.tmpS.set(h2 < 0.5 ? -sx : sx, dy * 1.1, sz));
+      const m = new THREE.Matrix4().compose(this.tmpV.set(cx, cy - dy * 0.04, cz), this.tmpQ, this.tmpS.set(sx, dy * 1.1, sz));
       out.push({ key, m, c: col.multiplyScalar(0.9 + h2 * 0.2), base: ground, glow: 0 });
       return out;
     }

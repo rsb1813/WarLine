@@ -66,7 +66,7 @@ interface Mind {
   beacon: boolean; mine: boolean; clay: boolean; coverPlaced: boolean;
   use: Use | null; pistolT: number; crouchUntil: number; spawnT: number; idx: number;
   arrived: boolean; following: boolean; headAim: boolean; scanYaw: number; scanT: number; smoked: boolean;
-  vReactT: number; gunBurst: number; gunPause: number;
+  vReactT: number; gunBurst: number; gunPause: number; boardTried: boolean;
 }
 
 const rnd = (g: Game): number => rand(g);
@@ -94,7 +94,7 @@ function newMind(g: Game, s: Soldier): Mind {
     beacon: false, mine: false, clay: false, coverPlaced: false,
     use: null, pistolT: 0, crouchUntil: 0, spawnT: g.time, idx: s.id,
     arrived: false, following: false, headAim: false, scanYaw: s.yaw, scanT: 0, smoked: false,
-    vReactT: 0, gunBurst: 0, gunPause: 0,
+    vReactT: 0, gunBurst: 0, gunPause: 0, boardTried: false,
   };
 }
 
@@ -106,7 +106,7 @@ function resetLife(g: Game, s: Soldier, m: Mind): void {
   m.task = 'obj'; m.hasHold = false; m.retreatUntil = 0; m.reviveId = -1; m.repairV = -1; m.vehId = -1;
   m.use = null; m.burstT = 0; m.pauseT = 0; m.firePrev = false; m.spawnT = g.time;
   m.beacon = false; m.mine = false; m.clay = false; m.coverPlaced = false;
-  m.inVeh = s.vehicle;
+  m.inVeh = s.vehicle; m.boardTried = false;
 }
 
 function clearEdges(c: Controls): void {
@@ -807,7 +807,6 @@ function classActs(g: Game, st: AIState, s: Soldier, m: Mind): void {
 function tryBoard(g: Game, st: AIState, s: Soldier, m: Mind): void {
   const hq = g.world.hq[s.team];
   if (hyp(s.pos.x - hq.x, s.pos.z - hq.z) > 90) return;
-  if (s.team === 0 && g.time < 6) return; // 사람이 먼저 고를 틈
   const pl = g.soldiers[g.player];
   let best: Vehicle | null = null, bd = 70;
   for (const v of g.vehicles) {
@@ -831,7 +830,7 @@ function tryBoard(g: Game, st: AIState, s: Soldier, m: Mind): void {
     }
     best = v; bd = d;
   }
-  if (!best || rnd(g) > 0.6) return;
+  if (!best || rnd(g) > 0.65) return;
   const vm = vmind(st, g, best);
   if (best.seats[0] < 0) { vm.claimBy = s.id; vm.claimUntil = g.time + 25; }
   m.task = 'board'; m.vehId = best.id; m.vehUntil = g.time + 25; m.hasHold = false;
@@ -974,7 +973,10 @@ function decide(g: Game, st: AIState, s: Soldier, m: Mind): void {
       if (v) { const vm = vmind(st, g, v); if (vm.claimBy === s.id) vm.claimBy = -1; }
       m.task = 'obj'; m.vehId = -1;
     } else { m.goalX = v.pos.x; m.goalZ = v.pos.z; return; }
-  } else if (g.time - m.spawnT < 3 && m.vehId < 0 && tD > 60) tryBoard(g, st, s, m);
+  } else if (!m.boardTried && m.vehId < 0 && tD > 60 && (s.team === 1 || g.time > 6)) {
+    m.boardTried = true;
+    if (g.time - m.spawnT < 4 || g.time < 16) tryBoard(g, st, s, m);
+  }
   if ((m.task as Task) === 'board') return;
 
   objectiveGoal(g, st, s, m);
@@ -1349,8 +1351,19 @@ function vehicleTick(g: Game, st: AIState, s: Soldier, m: Mind, c: Controls, dt:
 // ───────────────────────── 매 스텝 ─────────────────────────
 
 let claimSweep = 0;
+/** 진단용: 봇 갱신에 쓴 시간 (ms) */
+export const aiStats = { last: 0, worst: 0, total: 0, frames: 0 };
+const now = (): number => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
 export function updateBots(g: Game, dt: number): void {
+  const t0 = now();
+  updateAll(g, dt);
+  const d = now() - t0;
+  aiStats.last = d; aiStats.total += d; aiStats.frames++;
+  if (d > aiStats.worst) aiStats.worst = d;
+}
+
+function updateAll(g: Game, dt: number): void {
   let st = STATE.get(g);
   if (!st) { initBots(g); st = STATE.get(g); if (!st) return; }
   navFrame(st.nav);
