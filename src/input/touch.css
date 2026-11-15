@@ -1,0 +1,160 @@
+/* 터치 조작 레이어 (input 모듈). HUD(z 10) 위, 배치 화면(z 30) 아래. 위쪽 90px 은 HUD 버튼 몫으로 비워 둔다. */
+.tc-root {
+  --b: clamp(44px, 12.5vmin, 56px);
+  --f: clamp(68px, 21vmin, 92px);
+  --g: clamp(8px, 2.6vmin, 14px);
+  --u: calc(var(--b) + var(--g));
+  --R: clamp(46px, 15vmin, 64px);
+  --x0: var(--gr);
+  --y0: calc(var(--gb) + 12px);
+  --top: calc(var(--gt) + 90px);
+  position: absolute;
+  inset: 0;
+  z-index: 15;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: none;
+  font-family: var(--f-body);
+  overflow: hidden;
+}
+.tc-root[hidden] { display: none !important; }
+
+/* 영역: 시선 (오른쪽 60%), 이동 (왼쪽 아래 40%) */
+.tc-zone { position: absolute; pointer-events: auto; touch-action: none; }
+.tc-look { right: 0; bottom: 0; top: var(--top); width: 60%; }
+.tc-move { left: 0; bottom: 0; top: max(var(--top), 35%); width: 40%; }
+
+/* 떠 있는 이동 스틱 */
+.tc-stick {
+  position: absolute;
+  width: calc(var(--R) * 2);
+  height: calc(var(--R) * 2);
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.22);
+  background: radial-gradient(circle, rgba(10, 14, 19, 0.12) 0%, rgba(10, 14, 19, 0.34) 70%);
+  pointer-events: none;
+  opacity: 0.45;
+  transition: opacity 0.12s;
+}
+.tc-stick.tc-rest { left: calc(var(--gl) + 14px); bottom: calc(var(--gb) + 18px); }
+.tc-stick.tc-act { opacity: 1; transition: none; }
+.tc-knob {
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 46%; height: 46%;
+  margin: -23% 0 0 -23%;
+  border-radius: 50%;
+  background: rgba(238, 242, 245, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  will-change: transform;
+}
+.tc-sprint {
+  position: absolute;
+  left: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 2px 8px;
+  border-radius: 2px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+.tc-sprint.on { opacity: 1; }
+
+/* 버튼 */
+.tc-btn {
+  position: absolute;
+  width: var(--b);
+  height: var(--b);
+  border-radius: 50%;
+  background: rgba(10, 14, 19, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  color: var(--fg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  pointer-events: auto;
+  touch-action: none;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.1;
+  text-align: center;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.25);
+  transition: background-color 0.08s, border-color 0.08s, transform 0.08s;
+}
+.tc-btn svg { width: 40%; height: 40%; flex: none; }
+.tc-btn .tc-l { max-width: 92%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tc-btn.tc-long .tc-l { font-size: 9px; letter-spacing: -0.02em; }
+.tc-btn.tc-empty { opacity: 0.4; }
+.tc-btn.on { background: rgba(238, 242, 245, 0.3); border-color: rgba(255, 255, 255, 0.75); transform: scale(0.94); }
+.tc-btn.act { background: rgba(255, 181, 46, 0.32); border-color: var(--accent); color: var(--accent-2); }
+.tc-btn.tc-pulse { background: rgba(255, 181, 46, 0.45); border-color: var(--accent); }
+
+.tc-b-fire, .tc-b-fire2 { border-width: 2px; border-color: rgba(255, 255, 255, 0.4); background: rgba(10, 14, 19, 0.36); }
+.tc-b-fire { width: var(--f); height: var(--f); font-size: 11px; }
+.tc-b-fire.on, .tc-b-fire2.on { background: rgba(255, 74, 61, 0.34); border-color: rgba(255, 140, 130, 0.9); }
+.tc-b-fire2 { width: calc(var(--b) + 6px); height: calc(var(--b) + 6px); opacity: 0.8; }
+
+.tc-b-interact {
+  width: auto;
+  min-width: calc(var(--b) * 2);
+  max-width: 46vw;
+  height: calc(var(--b) * 0.86);
+  padding: 0 18px;
+  border-radius: 3px;
+  background: rgba(255, 181, 46, 0.9);
+  border-color: var(--accent-2);
+  color: var(--accent-ink);
+  font-size: 13px;
+  font-weight: 700;
+  text-shadow: none;
+  box-shadow: 0 2px 12px rgba(255, 181, 46, 0.35);
+}
+.tc-b-interact .tc-l { max-width: 100%; }
+.tc-b-interact.on { background: var(--accent-2); transform: translateX(-50%) scale(0.95); }
+.tc-b-exit { border-color: rgba(255, 181, 46, 0.6); }
+
+/* 가로 화면 배치: 오른쪽 아래 무리 */
+.tc-b-jump   { right: var(--x0); bottom: var(--y0); }
+.tc-b-crouch { right: calc(var(--x0) + var(--u)); bottom: var(--y0); }
+.tc-b-swap   { right: calc(var(--x0) + var(--u) * 2); bottom: var(--y0); }
+.tc-b-reload, .tc-b-seat { right: var(--x0); bottom: calc(var(--y0) + var(--u)); }
+.tc-b-throw, .tc-b-exit  { right: var(--x0); bottom: calc(var(--y0) + var(--u) * 2); }
+.tc-b-spot   { right: var(--x0); bottom: calc(var(--y0) + var(--u) * 3); }
+.tc-b-fire   { right: calc(var(--x0) + var(--u)); bottom: calc(var(--y0) + var(--u)); }
+.tc-b-ads    { right: calc(var(--x0) + var(--u) + var(--f) + var(--g)); bottom: calc(var(--y0) + var(--u) + (var(--f) - var(--b)) / 2); }
+.tc-b-g2, .tc-b-counter { right: calc(var(--x0) + var(--u)); bottom: calc(var(--y0) + var(--u) + var(--f) + var(--g)); }
+.tc-b-g1     { right: calc(var(--x0) + var(--u) * 2); bottom: calc(var(--y0) + var(--u) + var(--f) + var(--g)); }
+.tc-b-interact { left: 50%; bottom: calc(var(--y0) + var(--u) + var(--f) * 0.4); transform: translateX(-50%); }
+/* 왼쪽: 보조 사격, 헬기 상승·하강 */
+.tc-b-fire2  { left: var(--gl); top: max(calc(var(--top) + 84px), 44%); }
+.tc-b-up     { left: var(--gl); top: max(calc(var(--top) + 56px), 36%); }
+.tc-b-down   { left: var(--gl); top: calc(max(calc(var(--top) + 56px), 36%) + var(--u)); }
+
+/* 세로 화면: 스틱은 아래 왼쪽 절반, 시선은 나머지 전부, 버튼 무리는 위로 쌓는다 */
+@media (orientation: portrait) {
+  .tc-look { width: 100%; }
+  .tc-move { width: 50%; top: 56%; }
+  .tc-b-ads { right: calc(var(--x0) + var(--u) + (var(--f) - var(--b)) / 2); bottom: calc(var(--y0) + var(--u) + var(--f) + var(--g)); }
+  .tc-b-g2, .tc-b-counter { right: var(--x0); bottom: calc(var(--y0) + var(--u) * 4); }
+  .tc-b-g1 { right: var(--x0); bottom: calc(var(--y0) + var(--u) * 5); }
+  .tc-b-interact { bottom: calc(44% + 14px); }
+  .tc-b-fire2 { top: auto; bottom: calc(44% + 14px); }
+  .tc-b-up { top: auto; bottom: calc(44% + var(--u) + 14px); }
+  .tc-b-down { top: auto; bottom: calc(44% + 14px); }
+}
+
+/* 아주 낮은 가로 화면: 보조 사격은 빼서 미니맵과 겹치지 않게 */
+@media (orientation: landscape) and (max-height: 330px) {
+  .tc-b-fire2 { display: none; }
+}
