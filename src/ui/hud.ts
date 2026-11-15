@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import type { Game, GameEvent, Soldier, Vehicle } from '../types';
 import { VEHICLES } from '../defs';
 import { DEG, clamp, damp, wrapAngle, yawTo } from '../math';
-import { MiniMap, drawTactical, flagActivity } from './hud-map';
+import { MiniMap, drawTactical, flagActivity, mapImage } from './hud-map';
 import { Compass, Conquest } from './hud-top';
 import { Markers } from './hud-markers';
 import { HealthPanel, SquadList, VehiclePanel, WeaponPanel } from './hud-panels';
@@ -83,6 +83,8 @@ export class Hud {
 
   // 거점 알림용
   private lastOwned: number[] = [];
+  private frame = 0;
+  private flagMsgFrame = -1;
   private losingT: number[] = [];
 
   private onKey = (e: KeyboardEvent): void => {
@@ -105,6 +107,7 @@ export class Hud {
     this.markers = new Markers(R);
     this.scope = new ScopeView(R);
     this.fxFlash = el('div', 'fx-flash', R);
+    for (const e of [this.fxDesat, this.fxLow, this.fxDown, this.fxDmg, this.fxFlash]) setShow(e, false);
 
     // 가운데
     this.center = el('div', 'h-center', R);
@@ -114,6 +117,8 @@ export class Hud {
     el('i', 'xring', this.xh);
     this.hitEl = el('div', 'h-hit', this.center);
     for (const c of ['a', 'b', 'c', 'd']) el('i', c, this.hitEl);
+    setShow(this.hitEl, false);
+    setShow(this.xh, false);
     this.dmgSvg = svgEl('svg', { class: 'h-dmg', viewBox: '-100 -100 200 200' }, this.center);
     for (let i = 0; i < 6; i++) {
       const g0 = svgEl('g', {}, this.dmgSvg);
@@ -299,6 +304,8 @@ export class Hud {
 
   private setGame(g: Game): void {
     this.g = g;
+    // 지도 그림을 미리 만들어 첫 프레임 끊김을 줄인다
+    try { mapImage(g.world); } catch (err) { console.warn('지도 그림 실패', err); }
     this.conquest.setGame(g);
     this.lastOwned = g.flags.map((f) => f.owner);
     this.losingT = g.flags.map(() => -99);
@@ -393,7 +400,11 @@ export class Hud {
         if (e.s === pid) this.pops.add(e.text, e.pts, e.pts >= 100);
         break;
       case 'flag': this.flagEvent(e, g); break;
-      case 'msg': this.banner.show(e.text, '', e.tone, 3); break;
+      case 'msg':
+        // 같은 프레임의 무력화 알림은 위에서 더 분명한 문구로 이미 띄웠다
+        if (this.flagMsgFrame === this.frame && e.text.includes('무력화')) break;
+        this.banner.show(e.text, '', e.tone, 3);
+        break;
       case 'over': {
         const win = e.winner === g.soldiers[pid].team;
         setText(this.over.title, win ? '승리' : '패배');
@@ -417,10 +428,11 @@ export class Hud {
       else this.banner.show(`적이 거점 ${L}를 점령했습니다`, name, 'bad');
       if (e.team === 0 || e.team === 1) this.lastOwned[i] = e.team;
     } else if (e.what === 'neutralized') {
+      // sim 이 무력화 알림(msg)을 따로 보내므로 여기서는 소유 기록만 남긴다.
+      // 아군 거점을 잃은 경우에만 더 강한 문구로 바꾼다.
       const prev = this.lastOwned[i] ?? -1;
-      const lostByUs = prev === mine || (prev === -1 && e.team !== mine);
-      if (lostByUs) this.banner.show(`거점 ${L}를 잃었습니다`, name, 'bad');
-      else this.banner.show(`거점 ${L} 무력화`, name, 'good');
+      if (prev === mine) { this.banner.show(`거점 ${L}를 잃었습니다`, name, 'bad'); this.flagMsgFrame = this.frame; }
+      this.lastOwned[i] = -1;
     } else if (e.what === 'losing') {
       if (g.flags[i].owner === mine && this.clock - (this.losingT[i] ?? -99) > 15) {
         this.losingT[i] = this.clock;
@@ -451,6 +463,7 @@ export class Hud {
   update(g: Game, dt: number, cam: THREE.PerspectiveCamera, view: { w: number; h: number }, scope: { active: boolean; zoom: number; reticle: string }): void {
     if (g !== this.g) this.setGame(g);
     this.clock += dt;
+    this.frame++;
     const p = g.soldiers[g.player];
     if (!p) return;
     const deployed = !g.playerNeedsDeploy;
@@ -540,7 +553,7 @@ export class Hud {
     this.updateCapture(g, inside, alive || downed);
     this.updatePrompt(g, p, veh, alive);
     this.updateDown(g, p, downed, dt);
-    this.updateKillcard(g, dead && deployed);
+    this.updateKillcard(g, dead); // 죽으면 sim 이 바로 playerNeedsDeploy 를 켠다: 배치 화면이 덮을 때까지 보인다
 
     // 미사일 경고
     const lw = veh && alive ? veh.lockWarn : 0;

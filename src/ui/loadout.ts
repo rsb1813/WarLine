@@ -117,7 +117,7 @@ export function openEditor(host: HTMLElement, profile: Profile, cls: ClassId, on
     q('.wlo-nogl').hidden = false;
     q('.wlo-stage-hint').hidden = true;
   }
-  const wide = matchMedia('(min-width: 720px)');
+  const wide = matchMedia('(min-width: 720px) and (min-height: 520px)');
   const applyFrame = () => studio?.setFrame(wide.matches ? 1.9 : 1.22);
   applyFrame();
   wide.addEventListener?.('change', applyFrame);
@@ -498,13 +498,14 @@ export function openEditor(host: HTMLElement, profile: Profile, cls: ClassId, on
       let g: GadgetDef | undefined = GADGETS[p.id];
       let v = g?.variants.find((x) => x.id === p.variant) ?? g?.variants[0];
       let ref: GadgetVariant | undefined;
-      let cap = '<b>장착한 변형</b>';
-      if (st.picking && hk === 'gad' && GADGETS[hid]) { g = GADGETS[hid]; v = g.variants[0]; cap = '<b>기본 변형</b>'; }
+      let cap = '';
+      if (st.picking && hk === 'gad' && GADGETS[hid]) { g = GADGETS[hid]; v = g.variants[0]; cap = `<b>기본 변형</b><span>${esc(v?.name ?? '')}</span>`; }
       else if (!st.picking && hk === 'var' && g) {
         const hv = g.variants.find((x) => x.id === hid);
         if (hv && hv.id !== v?.id) { ref = v; v = hv; cap = `<b>${esc(ref?.name ?? '')}</b>${IC.arrow}<b>${esc(hv.name)}</b>`; }
       }
       if (!g || !v) { $right.innerHTML = ''; return; }
+      if (!cap) cap = `<b>장착한 변형</b><span>${esc(v.name)}</span>`;
       const keys = Object.keys(v.params);
       const rows = keys.map((k) => {
         const P = PARAM[k];
@@ -530,7 +531,7 @@ export function openEditor(host: HTMLElement, profile: Profile, cls: ClassId, on
           <div><dt>재사용 대기</dt><dd>${num(g.cooldown)}<small>초</small></dd></div>
           <div><dt>변형</dt><dd>${g.variants.length}</dd></div>
         </dl>
-        <div class="wlo-cmp"><span class="wlo-cmp-t">${cap}<span>${esc(v.name)}</span></span>${ref ? '<span class="wlo-legend"><i class="up"></i>향상<i class="dn"></i>저하</span>' : ''}</div>
+        <div class="wlo-cmp"><span class="wlo-cmp-t">${cap}</span>${ref ? '<span class="wlo-legend"><i class="up"></i>향상<i class="dn"></i>저하</span>' : ''}</div>
         <p class="wlo-r-d wlo-var-d">${esc(v.desc)}</p>
         <div class="wlo-stats">${rows || '<p class="wlo-r-d">수치 없음</p>'}</div>
         <p class="wlo-foot">${IC.info}<span>사용 횟수는 탄약 상자로 다시 채웁니다. 막대는 같은 장비의 변형끼리 비교합니다.</span></p>`;
@@ -631,10 +632,10 @@ export function openEditor(host: HTMLElement, profile: Profile, cls: ClassId, on
   }
 
   function scrollStageIntoView(): void {
-    if (wide.matches) return;
-    const r = $center.getBoundingClientRect();
-    const er = el.getBoundingClientRect();
-    if (r.top < er.top || r.top > er.top + er.height * 0.6) el.scrollTo({ top: el.scrollTop + r.top - er.top - 8, behavior: 'smooth' });
+    if (matchMedia('(min-width: 1100px)').matches) return;
+    const $body = q('.wlo-body');
+    const r = $center.getBoundingClientRect(), br = $body.getBoundingClientRect();
+    if (r.top < br.top - 1 || r.top > br.top + br.height * 0.5) $body.scrollTo({ top: $body.scrollTop + r.top - br.top - 4, behavior: 'smooth' });
   }
 
   // 클릭

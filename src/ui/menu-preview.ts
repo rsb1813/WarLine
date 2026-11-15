@@ -180,23 +180,22 @@ export class Studio {
       this.mirror.position.y = floorY * 2;
       this.key.target.position.set(0, floorY, 0);
       this.key.target.updateMatrixWorld();
-      this.fitLen = Math.max(size.x, size.z) * s;
+      this.fitLen = Math.max(size.x, size.z, size.y * 1.25) * s;
       this.fitCamera();
     }
     if (old) this.release(old);
   }
 
-  /** 다른 모델이 쓰지 않는 GPU 자원을 놓는다 (만드는 쪽이 공유 캐시를 써도 안전) */
+  /**
+   * 새 모델이 쓰지 않는 형상(geometry)을 놓는다. 재질·텍스처는 만드는 쪽이 공유 캐시로 쓸 수 있어서
+   * 건드리지 않는다 (편집기를 닫을 때 렌더러와 문맥째 정리).
+   */
   private release(old: THREE.Object3D): void {
-    const keep = new Set<unknown>();
-    this.model?.traverse((o) => collect(o, keep));
-    const drop = new Set<{ dispose(): void }>();
-    old.traverse((o) => {
-      const items = new Set<unknown>();
-      collect(o, items);
-      items.forEach((x) => { if (!keep.has(x)) drop.add(x as { dispose(): void }); });
-    });
-    drop.forEach((x) => { try { x.dispose(); } catch { /* 무시 */ } });
+    const keep = new Set<THREE.BufferGeometry>();
+    this.model?.traverse((o) => { const g = (o as THREE.Mesh).geometry; if (g) keep.add(g); });
+    const drop = new Set<THREE.BufferGeometry>();
+    old.traverse((o) => { const g = (o as THREE.Mesh).geometry; if (g && !keep.has(g)) drop.add(g); });
+    drop.forEach((g) => { try { g.dispose(); } catch { /* 무시 */ } });
   }
 
   /** 슬롯 기준점의 화면 좌표 (캔버스 css px) */
@@ -254,7 +253,7 @@ export class Studio {
     }
     const k = Math.min(1, Math.max(0, (this.idle - 1.2) / 2));
     const sway = Math.sin(this.t * 0.42) * 0.36 * k;
-    this.spin.rotation.set(0, -0.32 + this.yaw + sway, this.tilt + Math.sin(this.t * 0.31) * 0.04 * k, 'ZYX');
+    this.spin.rotation.set(0, 0.22 + this.yaw + sway, this.tilt + Math.sin(this.t * 0.31) * 0.04 * k, 'ZYX');
     this.spin.position.y = Math.sin(this.t * 0.9) * 0.01;
     this.mirrorSpin.rotation.copy(this.spin.rotation);
     this.mirrorSpin.position.copy(this.spin.position);
@@ -313,8 +312,9 @@ export class Studio {
     const c = this.camera;
     const tan2 = 2 * Math.tan((c.fov * Math.PI) / 360);
     const L = this.fitLen;
-    const d = Math.max((L * this.frameW) / (c.aspect * tan2), (L * 0.78) / tan2, 1.4);
-    const dir = new V(-1, 0.24, 0.16).normalize();
+    const fw = this.frameW > 1.5 && this.cssW < 700 ? this.frameW * 1.2 : this.frameW;
+    const d = Math.max((L * fw) / (c.aspect * tan2), (L * 0.78) / tan2, 1.4);
+    const dir = new V(-1, 0.26, 0.05).normalize();
     c.position.copy(dir.multiplyScalar(d));
     c.lookAt(0, -0.04, 0);
     c.near = Math.max(0.02, d * 0.05);
@@ -422,21 +422,6 @@ function canvasTex(w: number, h: number, draw: (g: CanvasRenderingContext2D, w: 
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
-}
-
-function collect(o: THREE.Object3D, into: Set<unknown>): void {
-  const m = o as THREE.Mesh;
-  if (!m.isMesh && !(o as THREE.Line).isLine && !(o as THREE.Points).isPoints) return;
-  if (m.geometry) into.add(m.geometry);
-  const mats = Array.isArray(m.material) ? m.material : [m.material];
-  for (const mt of mats) {
-    if (!mt) continue;
-    into.add(mt);
-    for (const k of Object.keys(mt)) {
-      const v = (mt as unknown as Record<string, unknown>)[k];
-      if (v && (v as THREE.Texture).isTexture) into.add(v);
-    }
-  }
 }
 
 /** 총 모델(원점 = 손잡이, 총구 -Z)에서 슬롯별 기준점. userData.muzzle / sight / mag 가 있으면 쓴다 */

@@ -87,6 +87,32 @@ export function latheZ(pts: [number, number][], seg = 20): THREE.BufferGeometry 
   });
 }
 
+/**
+ * Hollow shell of revolution around Z (see-through tubes, bells, rings).
+ * outer and inner are [r, z] lists with increasing z; the result is a closed solid ring with sharp edges.
+ */
+export function shellZ(outer: [number, number][], inner: [number, number][], seg = 24): THREE.BufferGeometry {
+  const key = `sh:${outer.map(p => r4(p[0]) + ',' + r4(p[1])).join(';')}|${inner.map(p => r4(p[0]) + ',' + r4(p[1])).join(';')}:${seg}`;
+  return cg(key, () => {
+    const prof: THREE.Vector2[] = [];
+    const push = (r: number, z: number, dup: boolean) => {
+      prof.push(new THREE.Vector2(Math.max(0.00001, r), z));
+      if (dup) prof.push(new THREE.Vector2(Math.max(0.00001, r), z));
+    };
+    outer.forEach((p, i) => push(p[0], p[1], i === 0 || i === outer.length - 1));
+    for (let i = inner.length - 1; i >= 0; i--) push(inner[i][0], inner[i][1], i === 0 || i === inner.length - 1);
+    push(outer[0][0], outer[0][1], false);
+    const g = new THREE.LatheGeometry(prof, seg);
+    g.rotateX(Math.PI / 2);
+    return g;
+  });
+}
+/** simple hollow cylinder along Z */
+export function hollowZ(ro: number, ri: number, z0: number, z1: number, seg = 24): THREE.BufferGeometry {
+  const a = Math.min(z0, z1), b = Math.max(z0, z1);
+  return shellZ([[ro, a], [ro, b]], [[ri, a], [ri, b]], seg);
+}
+
 /** rounded rectangle polygon (for profiles) */
 export function rrect(cx: number, cy: number, w: number, h: number, r: number, seg = 3): [number, number][] {
   const out: [number, number][] = [];

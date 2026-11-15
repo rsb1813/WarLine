@@ -83,6 +83,9 @@ export class Input {
   private adsToggle = false;
   private mode: InputMode = 'infantry';
   private lockFailed = false;
+  /** 연속 잠금 실패 수 (클릭마다 다시 조르지 않게) */
+  private lockFails = 0;
+  private lockFailAt = 0;
   private lockAt = 0;
   private lastPoll = 0;
   private lastTouch = -1e9;
@@ -117,7 +120,7 @@ export class Input {
     on(el, 'contextmenu', (e) => e.preventDefault());
     on(el, 'mouseleave', () => { this.freeX = NaN; this.freeY = NaN; });
     on(document, 'pointerlockchange', this.onLockChange);
-    on(document, 'pointerlockerror', () => { this.lockFailed = true; });
+    on(document, 'pointerlockerror', () => { this.lockFailed = true; this.lockFails++; this.lockFailAt = performance.now(); });
 
     if (this.touch) {
       const sink: TouchSink = {
@@ -331,6 +334,8 @@ export class Input {
     if (this.locked || this.mode === 'hidden' || this.synthMouse()) return;
     const t = ev.target;
     if (!(t instanceof Element) || isInteractive(t)) return;
+    // 잠금이 계속 막히는 환경: 클릭마다 조르지 않고 5초에 한 번만 다시 (lock() 직접 호출은 언제나 시도)
+    if (this.lockFails >= 3 && performance.now() - this.lockFailAt < 5000) return;
     if (t === this.el || t.parentElement === this.el) this.lock();
   };
 
@@ -346,6 +351,7 @@ export class Input {
   private onLockChange = (): void => {
     if (this.locked) {
       this.lockFailed = false;
+      this.lockFails = 0;
       this.lockAt = performance.now();
       this.freeX = NaN; this.freeY = NaN;
     } else {

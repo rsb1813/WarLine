@@ -253,9 +253,10 @@ export function glyphVehicle(ctx: CanvasRenderingContext2D, type: VehicleType, x
     ctx.beginPath(); ctx.ellipse(0, -s * 0.1, s * 0.42, s * 0.6, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(0, s * 0.4); ctx.lineTo(0, s * 1.3);
     ctx.lineWidth = Math.max(1.5, s * 0.18); ctx.strokeStyle = color; ctx.stroke();
-    ctx.lineWidth = 1; ctx.strokeStyle = color; ctx.globalAlpha = 0.8;
+    const a0 = ctx.globalAlpha;
+    ctx.lineWidth = 1; ctx.strokeStyle = color; ctx.globalAlpha = a0 * 0.8;
     ctx.beginPath(); ctx.moveTo(-s * 1.2, -s * 1.1); ctx.lineTo(s * 1.2, s * 0.9); ctx.moveTo(s * 1.2, -s * 1.1); ctx.lineTo(-s * 1.2, s * 0.9); ctx.stroke();
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha = a0;
   } else {
     const hw = type === 'mbt' ? 0.62 : type === 'ifv' ? 0.56 : 0.46;
     const hl = type === 'mbt' ? 0.95 : type === 'ifv' ? 0.85 : 0.72;
@@ -282,15 +283,16 @@ export function glyphVehicle(ctx: CanvasRenderingContext2D, type: VehicleType, x
 
 export function glyphFlag(ctx: CanvasRenderingContext2D, x: number, y: number, letter: string, owner: number, prog: number, s: number, pulse: number): void {
   const col = ownerColor(owner);
+  const a0 = ctx.globalAlpha;
   ctx.save();
   ctx.translate(x, y);
   if (pulse > 0) {
     ctx.beginPath();
     const pr = s * (1.25 + pulse * 0.6);
     ctx.moveTo(0, -pr); ctx.lineTo(pr, 0); ctx.lineTo(0, pr); ctx.lineTo(-pr, 0); ctx.closePath();
-    ctx.globalAlpha = 0.6 * (1 - pulse);
+    ctx.globalAlpha = a0 * 0.6 * (1 - pulse);
     ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.stroke();
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha = a0;
   }
   ctx.beginPath();
   ctx.moveTo(0, -s); ctx.lineTo(s, 0); ctx.lineTo(0, s); ctx.lineTo(-s, 0); ctx.closePath();
@@ -302,7 +304,7 @@ export function glyphFlag(ctx: CanvasRenderingContext2D, x: number, y: number, l
     ctx.save();
     ctx.clip();
     ctx.fillStyle = ownerColor(prog > 0 ? 0 : 1);
-    ctx.globalAlpha = 0.38;
+    ctx.globalAlpha = a0 * 0.38;
     ctx.fillRect(-s, s - 2 * s * p, 2 * s, 2 * s * p);
     ctx.restore();
   }
@@ -533,9 +535,8 @@ export function drawTactical(ctx: CanvasRenderingContext2D, g: Game, x0: number,
   ctx.fillStyle = 'rgba(238,242,245,0.35)';
   ctx.font = `600 10px 'Saira Condensed', sans-serif`;
   ctx.textBaseline = 'top'; ctx.textAlign = 'left';
-  for (let i = 0, x = 0; x < w.size - 20; x += 100, i++) ctx.fillText(String.fromCharCode(65 + i), X(x) + 3, y0 + 3);
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-  for (let i = 1, z = 100; z < w.size - 20; z += 100, i++) ctx.fillText(String(i + 1), x0 + 3, Y(z) + 3);
+  for (let i = 0, x = 0; x < w.size - 20; x += 100, i++) ctx.fillText(String.fromCharCode(65 + i), X(x) + 4, y0 + 3);
+  for (let i = 0, z = 0; z < w.size - 20; z += 100, i++) ctx.fillText(String(i + 1), x0 + 4, Y(z) + (i === 0 ? 15 : 3));
   // 본부
   for (let t = 0; t < 2; t++) {
     const hq = w.hq[t];

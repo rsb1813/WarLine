@@ -57,7 +57,7 @@ function classOf(b: Box): ClassKey | null {
     case 'sandbag': return 'sandbag';
     case 'container': return 'container';
     case 'fence': return b.mat === 'wood' ? 'fencewood' : b.mat === 'foliage' ? 'hedge' : 'fencemetal';
-    case 'roof': return b.mat === 'metal' ? 'roofmetal' : b.mat === 'wood' ? 'roofwood' : 'rooftar';
+    case 'roof': return b.mat === 'metal' ? 'roofmetal' : b.mat === 'wood' ? 'roofwood' : b.mat === 'brick' ? 'brick' : b.mat === 'glass' ? 'glass' : 'rooftar';
     case 'floor': case 'stair': case 'bridge':
       return b.mat === 'wood' ? 'floorwood' : b.mat === 'metal' ? 'metalprop' : b.mat === 'brick' ? 'brick' : b.mat === 'glass' ? 'glass' : 'floorconc';
     default: break;
@@ -144,7 +144,6 @@ export class BoxLayer {
   private scan = 0;
   private env: THREE.Texture | null;
   private glowFrac: number;
-  private tmpM = new THREE.Matrix4();
   private tmpQ = new THREE.Quaternion();
   private tmpE = new THREE.Euler();
   private tmpV = new THREE.Vector3();

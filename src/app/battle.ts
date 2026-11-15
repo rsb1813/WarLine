@@ -246,8 +246,16 @@ export function startBattle(root: HTMLElement, profile: Profile, onExit: (r: Bat
         if (f.sprint && f.mz > 0.3 && c.stance !== 'stand' && pl.sliding <= 0) c.stance = 'stand';
       }
       if (f.map) hud.toggleMap();
-      if (f.scoreboard !== showBoard) { showBoard = f.scoreboard; hud.showScoreboard(showBoard); }
+      boardKey(f.scoreboard);
       if (f.pause) pause();
+    };
+    // Tab 을 누르고 있는 동안만 점수판 (키 상태가 바뀔 때만 반응해서 터치 버튼으로 연 점수판을 닫지 않는다)
+    let boardHeld = false;
+    const boardKey = (held: boolean) => {
+      if (held === boardHeld) return;
+      boardHeld = held;
+      showBoard = held;
+      hud.showScoreboard(showBoard);
     };
     const nextSeat = (v: Vehicle, cur: number): number => {
       const n = VEHICLES[v.type].seats.length;
@@ -363,7 +371,7 @@ export function startBattle(root: HTMLElement, profile: Profile, onExit: (r: Bat
         else {
           clearInput();
           if (f.pause) pause();
-          if (f.scoreboard !== showBoard) { showBoard = f.scoreboard; hud.showScoreboard(showBoard); }
+          boardKey(f.scoreboard);
         }
         acc += dt;
         let n = 0;

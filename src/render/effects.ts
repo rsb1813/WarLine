@@ -14,7 +14,7 @@ import { LightPool } from './fx-lights';
 import { Snow } from './fx-snow';
 import {
   FxCtx, blackSmoke, blood, boxBreak, cannonBlast, collapse, debrisTrail, ember, explosion, fireSmoke, flares,
-  groundDustColor, groundFlame, impact, launchBlast, launchPuff, lodOf, muzzle, rocketPuff, rr, smallDust, smokeBurst,
+  groundDustColor, groundFlame, impact, launchBlast, launchPuff, muzzle, rocketPuff, rr, smallDust, smokeBurst,
   smokeLaunch, smokeWisp, teamTracer, tracer, vehicleBurst, vehicleFlame, vehicleSparks,
 } from './fx-recipes';
 
@@ -78,9 +78,9 @@ export class Effects {
     this.scene = scene;
     this.camera = camera;
     this.quality = quality;
-    this.atlas = makeAtlas(quality === 'low' ? 64 : 128);
+    this.atlas = makeAtlas(quality === 'low' ? 64 : quality === 'medium' ? 96 : 128);
     const cap = CAP[quality];
-    const alpCap = Math.round(cap * 0.56);
+    const alpCap = Math.round(cap * 0.65);
     this.alp = new ParticlePool(this.atlas, alpCap, 12 * 20 + 8, false);
     this.add = new ParticlePool(this.atlas, cap - alpCap, 120, true);
     this.decals = new Decals(this.atlas, DECALS[quality]);
@@ -167,10 +167,11 @@ export class Effects {
       }
       case 'collapse': {
         const b = g.world.buildings[e.building];
-        const half = b ? Math.max(b.w, b.d) * 0.6 + 1 : 10;
+        const cx = b ? b.x : e.pos.x, cz = b ? b.z : e.pos.z;
+        const hx = b ? b.w / 2 + 1 : 10, hz = b ? b.d / 2 + 1 : 10;
         const y0 = b ? b.y - 1 : e.pos.y - 6;
         const h = b ? b.floors * b.floorH + 4 : 24;
-        this.decals.clearBox(e.pos.x - half, y0, e.pos.z - half, e.pos.x + half, y0 + h, e.pos.z + half, 0);
+        this.decals.clearBox(cx - hx, y0, cz - hz, cx + hx, y0 + h, cz + hz, 0);
         collapse(fx, e.pos, b);
         break;
       }
@@ -186,7 +187,7 @@ export class Effects {
         const v = g.vehicles[e.v];
         if (!v) break;
         if (v.type === 'heli' || VEHICLES[v.type]?.counter === 'flare') flares(fx, v.pos, v.yaw);
-        else smokeLaunch(fx, v.pos, v.yaw, vsize(v.type));
+        else smokeLaunch(fx, v.pos, v.yaw + v.tYaw, vsize(v.type));
         break;
       }
       case 'down': case 'kill': {
@@ -222,7 +223,8 @@ export class Effects {
       const d = fx.distTo(mp);
       const cat = wd?.cat;
       const sc = cat === 'sniper' || cat === 'dmr' ? 1.3 : cat === 'lmg' ? 1.15 : cat === 'shotgun' ? 1.35 : cat === 'pistol' ? 0.7 : cat === 'smg' ? 0.8 : 1;
-      if (d < 700 && lodOf(fx, mp, true) > 0) {
+      const ahead = d < 12 || ((mp.x - fx.cam.x) * fx.camDir.x + (mp.y - fx.cam.y) * fx.camDir.y + (mp.z - fx.cam.z) * fx.camDir.z) / d > 0.2;
+      if (d < 700 && ahead) {
         // 먼 섬광은 조금 크게 (화면에서 사라지지 않게)
         muzzle(fx, mp, e.dir, sc * (d > 80 ? 1 + (d - 80) / 250 : 1), e.suppressed, d < 150 ? 1 : 0);
         if (fx.dim && !e.suppressed && d < 45) this.lights.flash(mp.x, mp.y, mp.z, 0xffc27a, 14 * sc, 7, 0.05, 0);
@@ -312,10 +314,12 @@ export class Effects {
         this.seenSmokes.add(s);
         if (age < 1.5) smokeBurst(fx, s.pos, s.r);
       }
-      const grow = smoothstep(0, 3.2, age);
-      const fade = clamp(s.life / 4, 0, 1);
-      const R = s.r * (0.3 + 0.7 * grow);
-      const A = 0.92 * fade * (0.55 + 0.45 * grow);
+      // sim 의 smokeBlocks 와 맞춘다: 1.2초 동안 빠르게 퍼지고, 마지막 2.5초 동안 옅어짐. pos 는 구름 가운데
+      const g0 = clamp(age / 1.2 + 0.35, 0, 1);
+      const grow = g0 * (2 - g0);
+      const fade = smoothstep(0, 2.5, s.life);
+      const R = s.r * (0.25 + 0.75 * grow);
+      const A = 0.92 * fade * (0.6 + 0.4 * grow);
       const seed = Math.imul(Math.floor(s.pos.x * 13.1), 73856093) ^ Math.imul(Math.floor(s.pos.z * 7.7), 19349663);
       for (let j = 0; j < N; j++) {
         const h1 = hh(seed, j, 1), h2 = hh(seed, j, 2), h3 = hh(seed, j, 3), h4 = hh(seed, j, 4);
@@ -324,13 +328,13 @@ export class Effects {
         const rad = R * 0.62 * Math.sqrt((j + 0.5) / N);
         const x = s.pos.x + Math.cos(a) * rad;
         const z = s.pos.z + Math.sin(a) * rad;
-        const y = s.pos.y + R * (0.3 + 0.4 * h3) + Math.sin(t * 0.45 + j * 1.7) * R * 0.04;
+        const y = s.pos.y + R * (-0.1 + 0.4 * h3) + Math.sin(t * 0.45 + j * 1.7) * R * 0.04;
         const size = R * (1.15 + 0.35 * h4) * (0.93 + 0.07 * Math.sin(t * 0.33 + j * 2.1));
         const sh = 0.78 + 0.14 * h1;
         this.alp.pushExt(x, y, z, size, h2 * 6.2832 + t * 0.045 * sg, F.SMOKE + (j & 3), sh, sh, sh * 1.02, A);
       }
-      const dx = fx.cam.x - s.pos.x, dy = fx.cam.y - (s.pos.y + R * 0.45), dz = fx.cam.z - s.pos.z;
-      const k = smoothstep(R * 0.95, R * 0.45, Math.hypot(dx, dy * 1.3, dz)) * A;
+      const dx = fx.cam.x - s.pos.x, dy = fx.cam.y - (s.pos.y + R * 0.1), dz = fx.cam.z - s.pos.z;
+      const k = smoothstep(R * 0.9, R * 0.45, Math.hypot(dx, dy * 1.2, dz)) * A;
       if (k > inside) inside = k;
       if (Math.random() < dt * 1.6 * fx.q * fade) smokeWisp(fx, s.pos, R, this.windX, this.windZ, fade);
     }

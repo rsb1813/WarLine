@@ -84,7 +84,7 @@ function marchTerrain(w: World, ox: number, oy: number, oz: number, dx: number, 
     if (t2 > tb) t2 = tb;
     if (oy + dy * t2 - heightAt(w, ox + dx * t2, oz + dz * t2) < 0) {
       let lo = t, hi = t2;
-      for (let i = 0; i < 10; i++) {
+      for (let i = 0; i < 40 && hi - lo > 0.004; i++) {
         const m = (lo + hi) * 0.5;
         if (oy + dy * m - heightAt(w, ox + dx * m, oz + dz * m) < 0) hi = m; else lo = m;
       }
@@ -181,11 +181,15 @@ function cast(w: World, ox: number, oy: number, oz: number, dx: number, dy: numb
         }
       }
       // 지형
-      const tl = best < tn ? best : tn;
+      let tl = best < tn ? best : tn;
       if (tl >= tc) {
-        const yl = oy + dy * tl;
-        if ((ya < yl ? ya : yl) <= tmax[ci]) {
-          const th = marchTerrain(w, ox, oy, oz, dx, dy, dz, tc, tl, hstep);
+        // 칸 지형 최대 높이 아래에 있는 구간만 행진
+        const hm = tmax[ci];
+        let ta = tc;
+        if (ivy < 0) { const te = (hm - oy) * ivy; if (te > ta) ta = te; }
+        else if (ivy > 0) { const te = (hm - oy) * ivy; if (te < tl) tl = te; }
+        if (ta <= tl) {
+          const th = marchTerrain(w, ox, oy, oz, dx, dy, dz, ta, tl, hstep);
           if (th >= 0 && th < best) { best = th; bestId = -1; bestAx = -1; }
         }
       }

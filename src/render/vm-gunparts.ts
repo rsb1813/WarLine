@@ -2,7 +2,7 @@
 // Conventions: metres, muzzle toward -Z, origin at the pistol grip (where the firing hand sits), +Y up, +X right.
 import * as THREE from 'three';
 import type { AttachmentDef, GunModelSpec, SlotId, WeaponDef } from '../types';
-import { Kit, rrect, circlePts } from './vm-geo';
+import { Kit, rrect, circlePts, cylGeo, torusGeo } from './vm-geo';
 import * as M from './vm-mats';
 
 export type V3 = [number, number, number];
@@ -192,8 +192,7 @@ export function boxMag(c: GunCtx, g: THREE.Object3D, o: BoxMagOpts, x = 0): { bo
   }
   const pts = [...back, ...front.reverse()];
   const mat = o.mat ?? c.m.polyDark;
-  const mesh = c.k.side(g, pts, o.thick, mat, x, 0.0022);
-  void mesh;
+  c.k.side(g, pts, o.thick, mat, x, 0.0022);
   // floorplate
   const plate = c.k.box(g, o.thick + 0.004, 0.009, o.depth * 1.12, o.plate ?? mat, x, last[1] - 0.002, last[0], 0.0025);
   plate.rotation.x = ang;
@@ -261,7 +260,6 @@ export function buildMag(c: GunCtx, z: number, top: number, base: { len: number;
 }
 
 // tiny geometry helpers local to parts
-import { cylGeo, torusGeo } from './vm-geo';
 function cylGeoX(r: number, len: number): THREE.BufferGeometry {
   const g = cylGeo(r, r, len, 22).clone();
   g.rotateZ(Math.PI / 2);

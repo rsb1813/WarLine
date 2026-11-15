@@ -72,11 +72,11 @@ export class DeployScreen {
     const match = el('div', 'dp-match', hd);
     const map = el('span', 'dp-mapname', match, '');
     const tk = el('div', 'dp-tk', match);
-    const s0 = el('span', 'dp-side f', tk, '');
+    const s0 = el('span', 'dp-fac f', tk, '');
     const t0 = el('b', 'dp-tnum f', tk, '0');
     el('span', 'dp-vs', tk, ':');
     const t1 = el('b', 'dp-tnum e', tk, '0');
-    const s1 = el('span', 'dp-side e', tk, '');
+    const s1 = el('span', 'dp-fac e', tk, '');
     const clock = el('span', 'dp-clock', match, '');
     const death = el('div', 'dp-death', hd, '');
     this.head = { map, t0, t1, s0, s1, clock, death, selName: el('span', '', null) };
@@ -162,7 +162,7 @@ export class DeployScreen {
     this.optSig = '';
     this.loadOptions();
     // 지난번 고른 곳이 아직 쓸 수 있으면 유지, 아니면 기본값
-    const keep = this.userPicked ? this.opts.findIndex((o) => keyOf(o) === this.selKey && o.ok) : -1;
+    const keep = this.userPicked ? this.opts.findIndex((o) => keyOf(o) === this.selKey) : -1;
     if (keep >= 0) this.select(keep, false); else { this.userPicked = false; this.select(this.pickDefault(), false); }
     this.refresh();
     this.optAcc = 0; this.mapAcc = 1;
@@ -185,8 +185,11 @@ export class DeployScreen {
       this.optAcc = 0;
       this.loadOptions();
       const i = this.opts.findIndex((o) => keyOf(o) === this.selKey);
-      if (i < 0 || (!this.opts[i].ok && !this.userPicked)) this.select(this.pickDefault(), false);
-      else if (i !== this.sel) this.select(i, false);
+      if (i < 0) this.userPicked = false;
+      if (!this.userPicked) {
+        const d = this.pickDefault();
+        if (d !== this.sel) this.select(d, false);
+      } else if (i !== this.sel) this.select(i, false);
     }
     this.updateHead();
     this.updateButton();
@@ -221,7 +224,8 @@ export class DeployScreen {
   private loadOptions(): void {
     let list: SpawnOption[] = [];
     try { list = spawnOptions(this.g, this.g.player); } catch { list = []; }
-    const sig = list.map((o) => `${keyOf(o)}:${o.ok ? 1 : 0}:${o.label}`).join('|');
+    const waiting = this.waiting();
+    const sig = list.map((o) => `${keyOf(o)}:${o.ok ? 1 : 0}:${o.label}`).join('|') + (waiting ? '|w' : '');
     this.opts = list;
     if (sig === this.optSig) {
       // 위치만 바뀌었을 수 있음 (분대원·차량 이동)
@@ -235,9 +239,8 @@ export class DeployScreen {
       b.type = 'button';
       el('span', 'tag', b, KIND_NAME[o.kind] ?? o.kind);
       el('span', 'lb', b, o.label);
-      if (!o.ok) el('span', 'st', b, '사용 불가');
-      b.disabled = false;
-      setCls(b, 'na', !o.ok);
+      if (!o.ok && !waiting) el('span', 'st', b, '사용 불가');
+      setCls(b, 'na', !o.ok && !waiting);
       b.addEventListener('click', () => this.select(i, true));
       this.optBtns.push(b);
     });
@@ -246,26 +249,36 @@ export class DeployScreen {
     this.syncSel();
   }
 
+  /** 재배치 대기 중이면 sim 이 모든 지점을 ok=false 로 준다: 그동안은 종류만 보고 고른다 */
+  private waiting(): boolean {
+    const p = this.g.soldiers[this.g.player];
+    return !!p && p.respawnT > 0 && !this.g.over;
+  }
+
   private pickDefault(): number {
     const o = this.opts;
     if (!o.length) return -1;
-    let i = o.findIndex((x) => x.kind === 'squad' && x.ok);
-    if (i >= 0) return i;
-    i = o.findIndex((x) => x.kind === 'beacon' && x.ok);
-    if (i >= 0) return i;
+    const w = this.waiting();
+    const can = (x: SpawnOption): boolean => x.ok || w;
+    // 지금 고른 것이 같은 종류로 여전히 쓸 만하면 유지 (분대원 사이를 오가지 않게)
+    const cur = o[this.sel];
+    const rank = (x: SpawnOption): number => (x.kind === 'squad' ? 0 : x.kind === 'beacon' ? 1 : x.kind === 'flag' ? 2 : x.kind === 'hq' ? 3 : 4);
+    let i = o.findIndex((x) => x.kind === 'squad' && can(x));
+    if (i < 0) i = o.findIndex((x) => x.kind === 'beacon' && can(x));
+    if (i >= 0) return cur && can(cur) && rank(cur) === rank(o[i]) ? this.sel : i;
     // 적 본부에 가장 가까운 내 거점 = 전방 거점
     const p = this.g.soldiers[this.g.player];
     const ehq = this.g.world.hq[p.team === 0 ? 1 : 0];
     let best = -1, bd = Infinity;
     o.forEach((x, k) => {
-      if (x.kind !== 'flag' || !x.ok) return;
+      if (x.kind !== 'flag' || !can(x)) return;
       const d = Math.hypot(x.pos.x - ehq.x, x.pos.z - ehq.z);
       if (d < bd) { bd = d; best = k; }
     });
     if (best >= 0) return best;
-    i = o.findIndex((x) => x.kind === 'hq' && x.ok);
+    i = o.findIndex((x) => x.kind === 'hq' && can(x));
     if (i >= 0) return i;
-    i = o.findIndex((x) => x.ok);
+    i = o.findIndex((x) => can(x));
     return i >= 0 ? i : 0;
   }
 

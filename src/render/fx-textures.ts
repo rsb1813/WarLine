@@ -2,7 +2,7 @@
 // 연기·먼지 뭉치, 불꽃 플립북 16장, 섬광 별, 불티 줄, 충격파 고리, 파편 조각, 유리 조각, 나뭇잎, 물방울,
 // 총구 옆 불꽃, 탄흔·유리 금·그을음·눈 자국 데칼. 한 번만 만든다.
 import * as THREE from 'three';
-import { clamp, fbm, smoothstep, valueNoise } from '../math';
+import { clamp, rng, smoothstep } from '../math';
 
 export const GRID = 8;
 
@@ -33,6 +33,36 @@ export const F = {
 type Px = [number, number, number, number];
 type Painter = (u: number, v: number, o: Px) => void;
 
+/** 표 기반 값 잡음 0..1 (math.valueNoise 보다 훨씬 빠름: 아틀라스 생성 시간 줄이기) */
+function valueNoise(seed: number): (x: number, y: number) => number {
+  const r = rng(seed);
+  const perm = new Uint8Array(512), val = new Float32Array(256);
+  for (let i = 0; i < 256; i++) { val[i] = r(); perm[i] = i; }
+  for (let i = 255; i > 0; i--) { const j = Math.floor(r() * (i + 1)); const t = perm[i]; perm[i] = perm[j]; perm[j] = t; }
+  for (let i = 0; i < 256; i++) perm[i + 256] = perm[i];
+  return (x, y) => {
+    const xi = Math.floor(x), yi = Math.floor(y);
+    const xf = x - xi, yf = y - yi;
+    const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+    const X = xi & 255, Y = yi & 255;
+    const p0 = perm[Y], p1 = perm[Y + 1];
+    const a = val[perm[X + p0]], b = val[perm[X + 1 + p0]], c = val[perm[X + p1]], d = val[perm[X + 1 + p1]];
+    return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+  };
+}
+
+/** 여러 옥타브 값 잡음 0..1 */
+function fbm(seed: number, oct: number): (x: number, y: number) => number {
+  const n = valueNoise(seed);
+  let tot = 0;
+  for (let o = 0, a = 0.5; o < oct; o++, a *= 0.5) tot += a;
+  return (x, y) => {
+    let s = 0, a = 0.5, f = 1;
+    for (let o = 0; o < oct; o++) { s += n(x * f + o * 17.31, y * f + o * 9.13) * a; a *= 0.5; f *= 2.03; }
+    return s / tot;
+  };
+}
+
 /** 0..1 로 대비를 늘린 잡음 */
 const contrast = (n: number, k: number): number => clamp((n - 0.5) * k + 0.5, 0, 1);
 
@@ -51,7 +81,7 @@ function over(o: Px, r: number, g: number, b: number, a: number): void {
 function smokePainter(seed: number, soft: boolean): Painter {
   const nA = fbm(seed, 3), nB = fbm(seed + 17, 5);
   return (u, v, o) => {
-    const x = u * 2 - 1, y = v * 2 - 1, r = Math.hypot(x, y);
+    const x = u * 2 - 1, y = v * 2 - 1, r = Math.sqrt(x * x + y * y);
     const warp = nA(x * 1.7 + 5.3, y * 1.7 + 9.1);
     const d = contrast(nB(x * 3.3 + 1.7, y * 3.3 + 3.9), 2.4);
     let a: number;
@@ -68,14 +98,16 @@ function smokePainter(seed: number, soft: boolean): Painter {
   };
 }
 
+const FIRE_RAMP: [number, number, number, number][] = [
+  [0.0, 0.18, 0.04, 0.01], [0.3, 0.75, 0.18, 0.02], [0.55, 1.0, 0.5, 0.08], [0.8, 1.0, 0.82, 0.42], [1.0, 1.0, 0.98, 0.85],
+];
+
 function firePainter(frame: number, frames: number): Painter {
   const t = frame / (frames - 1);
   const nA = fbm(311, 5), nB = fbm(733, 3);
   // 온도 → 색 (sRGB)
+  const st = FIRE_RAMP;
   const ramp = (h: number, o: Px): void => {
-    const st: [number, number, number, number][] = [
-      [0.0, 0.18, 0.04, 0.01], [0.3, 0.75, 0.18, 0.02], [0.55, 1.0, 0.5, 0.08], [0.8, 1.0, 0.82, 0.42], [1.0, 1.0, 0.98, 0.85],
-    ];
     h = clamp(h, 0, 1);
     for (let i = 1; i < st.length; i++) {
       if (h <= st[i][0]) {
@@ -86,7 +118,7 @@ function firePainter(frame: number, frames: number): Painter {
     }
   };
   return (u, v, o) => {
-    const x = u * 2 - 1, y = v * 2 - 1, r = Math.hypot(x, y);
+    const x = u * 2 - 1, y = v * 2 - 1, r = Math.sqrt(x * x + y * y);
     const n1 = nA(x * 2.1 + 13.0 + frame * 0.37, y * 2.1 - t * 3.2 + 7.0);
     const n2 = nB(x * 5.2 + 3.0, y * 5.2 - t * 6.5 + frame * 0.21);
     const rad = 0.6 + 0.32 * t;
@@ -102,7 +134,7 @@ function firePainter(frame: number, frames: number): Painter {
 function chipPainter(seed: number): Painter {
   const n = valueNoise(seed), n2 = fbm(seed + 3, 3);
   return (u, v, o) => {
-    const x = u * 2 - 1, y = v * 2 - 1, r = Math.hypot(x, y);
+    const x = u * 2 - 1, y = v * 2 - 1, r = Math.sqrt(x * x + y * y);
     const ang = Math.atan2(y, x);
     const rad = 0.45 + 0.42 * n(Math.cos(ang) * 1.6 + 3, Math.sin(ang) * 1.6 + 3);
     const facet = clamp(0.55 - 0.35 * (x * 0.7 - y * 0.7) + (n2(x * 4, y * 4) - 0.5) * 0.5, 0, 1);
@@ -130,7 +162,7 @@ function paint(data: Uint8Array, S: number, C: number, cell: number, fn: Painter
   }
 }
 
-/** 아틀라스 만들기. cell = 한 칸 픽셀 (낮음 64, 그 외 128) */
+/** 아틀라스 만들기. cell = 한 칸 픽셀 (낮음 64, 보통 96, 높음 128) */
 export function makeAtlas(cell: number): THREE.DataTexture {
   const C = cell, S = C * GRID;
   const data = new Uint8Array(S * S * 4);
@@ -146,7 +178,7 @@ export function makeAtlas(cell: number): THREE.DataTexture {
   });
 
   paint(data, S, C, F.STAR, (u, v, o) => {
-    const x = u * 2 - 1, y = v * 2 - 1, r = Math.hypot(x, y), ang = Math.atan2(y, x);
+    const x = u * 2 - 1, y = v * 2 - 1, r = Math.sqrt(x * x + y * y), ang = Math.atan2(y, x);
     const rays = Math.pow(Math.abs(Math.cos(ang * 2)), 70) + Math.pow(Math.abs(Math.cos(ang * 3 + 0.5)), 26) * 0.55;
     const ray = rays * Math.pow(Math.max(0, 1 - r), 1.6);
     const a = Math.exp(-r * r * 28) + ray + Math.exp(-r * r * 5) * 0.32;
@@ -155,7 +187,7 @@ export function makeAtlas(cell: number): THREE.DataTexture {
   });
 
   paint(data, S, C, F.FLARE, (u, v, o) => {
-    const x = u * 2 - 1, y = v * 2 - 1, r = Math.hypot(x, y), ax = 1 - Math.abs(x);
+    const x = u * 2 - 1, y = v * 2 - 1, r = Math.sqrt(x * x + y * y), ax = 1 - Math.abs(x);
     const a = Math.exp(-y * y * 420) * ax * ax * 0.85 + Math.exp(-y * y * 50) * ax * ax * ax * 0.25 + Math.exp(-r * r * 30) * 0.6;
     o[0] = 0.85; o[1] = 0.92; o[2] = 1;
     o[3] = clamp(a, 0, 1) * smoothstep(1.0, 0.92, Math.abs(x)) * smoothstep(1.0, 0.9, Math.abs(y));
@@ -166,7 +198,7 @@ export function makeAtlas(cell: number): THREE.DataTexture {
   {
     const n = valueNoise(57);
     paint(data, S, C, F.RING, (u, v, o) => {
-      const x = u * 2 - 1, y = v * 2 - 1, r0 = Math.hypot(x, y);
+      const x = u * 2 - 1, y = v * 2 - 1, r0 = Math.sqrt(x * x + y * y);
       const r = r0 + (n(x * 6 + 2, y * 6 + 2) - 0.5) * 0.05;
       const ring = Math.exp(-Math.pow((r - 0.8) / 0.075, 2));
       const fill = smoothstep(0.82, 0.3, r) * 0.2 * (r / 0.82);
@@ -196,10 +228,11 @@ export function makeAtlas(cell: number): THREE.DataTexture {
     });
   }
 
+  const A = [-0.38, -0.78, 0], B = [0.6, -0.12, 0], Cc = [-0.08, 0.88, 0];
+  A[2] = Math.hypot(B[0] - A[0], B[1] - A[1]); B[2] = Math.hypot(Cc[0] - B[0], Cc[1] - B[1]); Cc[2] = Math.hypot(A[0] - Cc[0], A[1] - Cc[1]);
   paint(data, S, C, F.SHARD, (u, v, o) => {
     const x = u * 2 - 1, y = v * 2 - 1;
-    const A = [-0.38, -0.78], B = [0.6, -0.12], Cc = [-0.08, 0.88];
-    const e = (p: number[], q: number[]): number => ((q[0] - p[0]) * (y - p[1]) - (q[1] - p[1]) * (x - p[0])) / Math.hypot(q[0] - p[0], q[1] - p[1]);
+    const e = (p: number[], q: number[]): number => ((q[0] - p[0]) * (y - p[1]) - (q[1] - p[1]) * (x - p[0])) / p[2];
     const d = Math.min(e(A, B), e(B, Cc), e(Cc, A));
     const edgeHi = Math.exp(-Math.pow(e(B, Cc) / 0.06, 2));
     const sh = clamp(0.7 + 0.2 * (y * 0.5 + 0.5) + edgeHi * 0.4, 0, 1);
@@ -216,7 +249,7 @@ export function makeAtlas(cell: number): THREE.DataTexture {
   });
 
   paint(data, S, C, F.DROP, (u, v, o) => {
-    const x = u * 2 - 1, y = v * 2 - 1, r = Math.hypot(x, y);
+    const x = u * 2 - 1, y = v * 2 - 1, r = Math.sqrt(x * x + y * y);
     const h = Math.exp(-((x + 0.25) ** 2 + (y - 0.3) ** 2) * 30);
     const sh = 0.82 + 0.18 * h;
     o[0] = sh; o[1] = sh; o[2] = sh;
@@ -238,8 +271,10 @@ export function makeAtlas(cell: number): THREE.DataTexture {
 
   {
     const nn = fbm(808, 4), na = valueNoise(809);
+    const hA: number[] = [], hL: number[] = [];
+    for (let k = 0; k < 6; k++) { hA.push(k * 1.047 + na(k * 3.1, 1.7) * 0.8); hL.push(0.5 + 0.4 * na(k * 1.3, 4.1)); }
     paint(data, S, C, F.HOLE, (u, v, o) => {
-      const x = u * 2 - 1, y = v * 2 - 1, r = Math.hypot(x, y), ang = Math.atan2(y, x);
+      const x = u * 2 - 1, y = v * 2 - 1, r = Math.sqrt(x * x + y * y), ang = Math.atan2(y, x);
       const n = contrast(nn(x * 6 + 4, y * 6 + 4), 2);
       o[0] = 1; o[1] = 1; o[2] = 1; o[3] = 0;
       // 그을음 테
@@ -247,9 +282,9 @@ export function makeAtlas(cell: number): THREE.DataTexture {
       // 금
       let crack = 0;
       for (let k = 0; k < 6; k++) {
-        const a0 = k * 1.047 + na(k * 3.1, 1.7) * 0.8;
+        const a0 = hA[k];
         let da = Math.abs(ang - a0); da = Math.min(da, Math.PI * 2 - da);
-        const lenK = 0.5 + 0.4 * na(k * 1.3, 4.1);
+        const lenK = hL[k];
         crack = Math.max(crack, Math.exp(-Math.pow((da * r) / 0.022, 2)) * smoothstep(lenK, lenK * 0.6, r) * smoothstep(0.1, 0.2, r));
       }
       over(o, 0.18, 0.17, 0.16, crack * 0.85);
@@ -264,15 +299,17 @@ export function makeAtlas(cell: number): THREE.DataTexture {
 
   {
     const na = valueNoise(919);
+    const cA: number[] = [], cL: number[] = [];
+    for (let k = 0; k < 8; k++) { cA.push(k * 0.785 + na(k * 2.3, 0.5) * 0.6); cL.push(0.6 + 0.35 * na(k * 1.7, 2.2)); }
     paint(data, S, C, F.CRACK, (u, v, o) => {
-      const x = u * 2 - 1, y = v * 2 - 1, r = Math.hypot(x, y), ang = Math.atan2(y, x);
+      const x = u * 2 - 1, y = v * 2 - 1, r = Math.sqrt(x * x + y * y), ang = Math.atan2(y, x);
       o[0] = 1; o[1] = 1; o[2] = 1; o[3] = 0;
       over(o, 0.75, 0.78, 0.8, 0.35 * smoothstep(0.25, 0.05, r));
       let line = 0;
       for (let k = 0; k < 8; k++) {
-        const a0 = k * 0.785 + na(k * 2.3, 0.5) * 0.6;
+        const a0 = cA[k];
         let da = Math.abs(ang - a0 - Math.sin(r * 9 + k) * 0.05); da = Math.min(da, Math.PI * 2 - da);
-        const lenK = 0.6 + 0.35 * na(k * 1.7, 2.2);
+        const lenK = cL[k];
         line = Math.max(line, Math.exp(-Math.pow((da * r) / 0.012, 2)) * smoothstep(lenK, lenK * 0.7, r));
       }
       for (let k = 0; k < 2; k++) {
@@ -287,7 +324,7 @@ export function makeAtlas(cell: number): THREE.DataTexture {
   {
     const n = fbm(1212, 4), n2 = fbm(1313, 3), na = valueNoise(1414);
     paint(data, S, C, F.SCORCH, (u, v, o) => {
-      const x = u * 2 - 1, y = v * 2 - 1, r = Math.hypot(x, y), ang = Math.atan2(y, x);
+      const x = u * 2 - 1, y = v * 2 - 1, r = Math.sqrt(x * x + y * y), ang = Math.atan2(y, x);
       const m = contrast(n(x * 3 + 2, y * 3 + 2), 2);
       const d = contrast(n2(x * 7 + 5, y * 7 + 5), 2);
       const rr = r * (1 + (m - 0.5) * 0.55);
@@ -300,7 +337,7 @@ export function makeAtlas(cell: number): THREE.DataTexture {
   }
 
   paint(data, S, C, F.DENT, (u, v, o) => {
-    const x = u * 2 - 1, y = v * 2 - 1, r = Math.hypot(x, y);
+    const x = u * 2 - 1, y = v * 2 - 1, r = Math.sqrt(x * x + y * y);
     const sh = 0.42 + 0.35 * smoothstep(0.6, -0.6, y);
     o[0] = sh; o[1] = sh; o[2] = sh;
     o[3] = Math.pow(smoothstep(1, 0.05, r), 1.3) * 0.85;

@@ -480,7 +480,7 @@ export function explosion(fx: FxCtx, p: Vec3, r: number, kind: ExpKind): void {
       const i = P(fx.alp, x + cx * vr * 0.25, sy + rr(0.25, 0.7), z + cz * vr * 0.25, cx * s, rr(0.3, 1.2), cz * s,
         rr(2.5, 5), vr * 0.35, vr * rr(1.1, 1.7), dustF(), dustC, dustC, rr(0.45, 0.6), 2.2, 0.12, 0.6, 0.03, 0.35);
       fx.alp.tint(i, rr(0.85, 1.1));
-      fx.alp.gy[i] = sy + 0.2;
+      fx.alp.slide(i, sy + 0.2);
     }
     // 흙기둥 (포탄·지뢰)
     if (def.col > 0) {
@@ -489,7 +489,7 @@ export function explosion(fx: FxCtx, p: Vec3, r: number, kind: ExpKind): void {
         const u = rndUp(1.2);
         const i = P(fx.alp, x, sy + 0.3, z, u.x * vr * 0.6, vr * rr(3, 7), u.z * vr * 0.6, rr(1.4, 2.4), vr * 0.25, vr * rr(0.8, 1.2),
           dustF(), dark, dustC, 0.8, 1.4, 5, 0.3, 0.03, 0.4);
-        fx.alp.gy[i] = sy + 0.3;
+        fx.alp.slide(i, sy + 0.3);
       }
       for (let j = 0; j < cnt(def.col * (6 + vr * 2) * qq); j++) {
         const u = rndUp(0.8);
@@ -505,7 +505,7 @@ export function explosion(fx: FxCtx, p: Vec3, r: number, kind: ExpKind): void {
         const o = vr * 0.6 * R();
         const i = P(fx.alp, x + u.x * o, sy + 0.4, z + u.z * o, u.x * vr * rr(1, 3), vr * rr(0.8, 2.5), u.z * vr * rr(1, 3),
           rr(3, 5.5), vr * 0.4, vr * rr(1.2, 1.8), dustF(), C.snow, C.snow, 0.6, 1.6, 0.6, 0.8, 0.04, 0.4);
-        fx.alp.gy[i] = sy + 0.3;
+        fx.alp.slide(i, sy + 0.3);
       }
     }
     // 충격파 고리
@@ -635,21 +635,25 @@ export function flares(fx: FxCtx, p: Vec3, yaw: number): void {
   }
 }
 
-/** 지상 차량 연막탄 발사: 앞쪽 부채꼴로 날아가 퍼지는 흰 연기 벽 */
+/**
+ * 지상 차량 연막탄 발사: 포탑 둘레 발사 섬광과 앞쪽 부채꼴로 날아가는 연기 줄기.
+ * 연막 벽 자체는 sim 이 g.smokes 에 넣고 drawSmokes 가 그린다. yaw = 포탑 방향
+ */
 export function smokeLaunch(fx: FxCtx, p: Vec3, yaw: number, size: Vec3): void {
   const fw = forwardXZ(yaw);
-  const top = p.y + size.y * 0.8;
+  const top = p.y + size.y * 0.85;
   const gy = fx.world ? heightAt(fx.world, p.x, p.z) : p.y;
   for (let k = 0; k < 6; k++) {
-    const a = (k - 2.5) * 0.28;
+    const a = (k - 2.5) * 0.36;
     const ca = Math.cos(a), sa = Math.sin(a);
     const dx = fw.x * ca - fw.z * sa, dz = fw.x * sa + fw.z * ca;
-    P(fx.add, p.x + dx * 1.2, top, p.z + dz * 1.2, 0, 0, 0, 0.06, 0.6, 0.8, F.STAR, C.flash0, C.flash1, 1, 0, 0, 0, 0, 0.2);
-    for (let m = 0; m < 3; m++) {
-      const s = rr(10, 16);
-      const i = P(fx.alp, p.x + dx * 1.2, top, p.z + dz * 1.2, dx * s, rr(4, 6), dz * s, rr(9, 12), 0.8, rr(5, 7), smokeF(),
-        col(0.86, 0.86, 0.85), col(0.8, 0.8, 0.8), 0.78, 0.9, 6, 0.6, 0.05, 0.65);
-      fx.alp.gy[i] = gy + 1.5;
+    const x0 = p.x + dx * 1.2, z0 = p.z + dz * 1.2;
+    P(fx.add, x0, top, z0, 0, 0, 0, 0.06, 0.6, 0.8, F.STAR, C.flash0, C.flash1, 1, 0, 0, 0, 0, 0.2);
+    for (let m = 0; m < 2; m++) {
+      const s = rr(6, 9);
+      const i = P(fx.alp, x0, top, z0, dx * s, rr(3, 4.5), dz * s, rr(2.5, 4), 0.4, rr(2.5, 3.5), smokeF(),
+        col(0.86, 0.86, 0.85), col(0.8, 0.8, 0.8), 0.6, 0.8, 5, 0.6, 0.03, 0.5);
+      fx.alp.slide(i, gy + 1.2);
     }
   }
 }
@@ -664,7 +668,7 @@ export function boxBreak(fx: FxCtx, pos: Vec3, mat: string, box: Box | undefined
   const mx = box ? box.max : { x: pos.x + 0.5, y: pos.y + 0.5, z: pos.z + 0.5 };
   const sx = mx.x - mn.x, sy = mx.y - mn.y, sz = mx.z - mn.z;
   const vs = clamp(Math.cbrt(Math.max(0.01, sx * sy * sz)), 0.4, 4);
-  const cx = (mn.x + mx.x) / 2, cy = (mn.y + mx.y) / 2, cz = (mn.z + mx.z) / 2;
+  const cx = (mn.x + mx.x) / 2, cz = (mn.z + mx.z) / 2;
   const rp = (o: Vec3): Vec3 => { o.x = mn.x + R() * sx; o.y = mn.y + R() * sy; o.z = mn.z + R() * sz; return o; };
   const tmp: Vec3 = { x: 0, y: 0, z: 0 };
   const glass = mat === 'glass';
@@ -727,7 +731,7 @@ export function boxBreak(fx: FxCtx, pos: Vec3, mat: string, box: Box | undefined
       for (let j = 0; j < cnt(6 * qq) + 1; j++) {
         const i = P(fx.alp, cx + rr(-1, 1) * sx * 0.5, mx.y - R() * sy * 0.4, cz + rr(-1, 1) * sz * 0.5, rr(-0.5, 0.5), rr(-0.5, 0.3), rr(-0.5, 0.5),
           rr(2, 3), 0.6, rr(1.6, 2.4), dustF(), C.snow, C.snow, 0.5, 1.2, 0.8, 0.6, 0.05, 0.4);
-        fx.alp.gy[i] = floorY + 0.4;
+        fx.alp.slide(i, floorY + 0.4);
       }
     }
   }
@@ -735,7 +739,7 @@ export function boxBreak(fx: FxCtx, pos: Vec3, mat: string, box: Box | undefined
 
 export function collapse(fx: FxCtx, pos: Vec3, b: Building | undefined): void {
   const W = b ? b.w : 12, D = b ? b.d : 12, H = b ? b.floors * b.floorH : 8, y0 = b ? b.y : pos.y;
-  const cx = pos.x, cz = pos.z;
+  const cx = b ? b.x : pos.x, cz = b ? b.z : pos.z; // Building.x/z = 바닥 사각형 중심
   const lod = Math.max(0.35, lodOf(fx, pos, true));
   if (fx.distTo(pos) > 1100) return;
   const qq = fx.q * lod;
@@ -752,7 +756,7 @@ export function collapse(fx: FxCtx, pos: Vec3, b: Building | undefined): void {
         const dx = x - cx, dz = z - cz, l = Math.hypot(dx, dz) || 1;
         const i = P(fx.alp, x, y, z, dx / l * rr(1.5, 5), rr(0.3, 2.0), dz / l * rr(1.5, 5), rr(8, 15), rr(2.5, 4.5) * sz, rr(8, 13) * sz,
           R() < 0.5 ? dustF() : smokeF(), dustC, dustC, rr(0.55, 0.75), 0.55, 0.04, 0.5, 0.1, 0.5);
-        fx.alp.tint(i, rr(0.85, 1.1)); fx.alp.rv[i] = rr(-0.15, 0.15); fx.alp.gy[i] = y0 + 1;
+        fx.alp.tint(i, rr(0.85, 1.1)); fx.alp.rv[i] = rr(-0.15, 0.15); fx.alp.slide(i, y0 + 1);
       }
       const n2 = cnt(10 * qq) + 2;
       for (let j = 0; j < n2; j++) {
@@ -760,7 +764,7 @@ export function collapse(fx: FxCtx, pos: Vec3, b: Building | undefined): void {
         const s = rr(5, 10);
         const i = P(fx.alp, cx + ca * W * 0.45, y0 + 0.8, cz + sa * D * 0.45, ca * s, 0.2, sa * s, rr(6, 10), 2 * sz, rr(6, 9) * sz,
           dustF(), dustC, dustC, 0.6, 0.9, 0, 0.5, 0.05, 0.5);
-        fx.alp.tint(i, rr(0.85, 1.05)); fx.alp.gy[i] = y0 + 0.6;
+        fx.alp.tint(i, rr(0.85, 1.05)); fx.alp.slide(i, y0 + 0.6);
       }
       const nb = cnt(25 * qq) + 3;
       for (let j = 0; j < nb; j++) {
@@ -822,7 +826,7 @@ export function cannonBlast(fx: FxCtx, p: Vec3, d: Vec3, groundY: number | null,
       const a = R() * 6.2832, ca = Math.cos(a), sa = Math.sin(a), s = rr(4, 9);
       const i = P(fx.alp, p.x + ca * 1.5, groundY + 0.3, p.z + sa * 1.5, ca * s + d.x * 3, rr(0.2, 0.8), sa * s + d.z * 3, rr(2, 3.5), 1, rr(3, 5),
         dustF(), dustC, dustC, 0.45, 2, 0.1, 0.6, 0.03, 0.35);
-      fx.alp.gy[i] = groundY + 0.2;
+      fx.alp.slide(i, groundY + 0.2);
     }
   }
 }

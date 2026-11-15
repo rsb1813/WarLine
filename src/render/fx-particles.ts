@@ -118,7 +118,7 @@ export class ParticlePool {
   readonly fr: Float32Array; readonly nf: Float32Array;
   /** 모드, 늘인 줄 기본 길이, 속도당 길이 */
   readonly mode: Float32Array; readonly ln: Float32Array; readonly st: Float32Array;
-  /** 바닥 높이와 튕김 (0 = 닿으면 멈춤) */
+  /** 바닥 높이와 튕김 (> 0 튕김, 0 = 닿으면 멈춤, < 0 = 바닥을 따라 미끄러짐) */
   readonly gy: Float32Array; readonly bnc: Float32Array;
 
   private readonly all: Float32Array[];
@@ -197,12 +197,12 @@ export class ParticlePool {
   free(): number { return 1 - this.n / this.cap; }
 
   /**
-   * 파티클 하나. 돌려준 번호로 배열을 직접 고쳐 세부 값을 바꾼다.
+   * 파티클 하나. 돌려준 번호로 배열을 직접 고쳐 세부 값을 바꾼다. 가득 차면 거의 끝난 파티클을 덮어쓰거나 버린다.
    * 기본값: 무작위 회전, 감쇠·중력·바람 0, 나타나기 0.08, 사라지기 0.5, 모드 0, 바닥 없음.
    */
   emit(x: number, y: number, z: number, vx: number, vy: number, vz: number, life: number,
     s0: number, s1: number, frame: number, c0: Col, c1: Col, alpha: number): number {
-    const i = this.n < this.cap ? this.n++ : this.cap;
+    const i = this.n < this.cap ? this.n++ : this.victim();
     this.px[i] = x; this.py[i] = y; this.pz[i] = z;
     this.vx[i] = vx; this.vy[i] = vy; this.vz[i] = vz;
     this.age[i] = 0; this.life[i] = life > 0.01 ? life : 0.01;
@@ -218,6 +218,17 @@ export class ParticlePool {
     return i;
   }
 
+  /** 가득 찼을 때 덮어쓸 자리: 무작위 몇 개 중 수명이 가장 많이 지난 것 */
+  private victim(): number {
+    let best = this.cap, bestT = 0.35;
+    for (let k = 0; k < 6; k++) {
+      const j = (Math.random() * this.cap) | 0;
+      const t = this.age[j] / this.life[j];
+      if (t > bestT) { bestT = t; best = j; }
+    }
+    return best; // 다 젊으면 빈 칸(this.cap)에 써서 버린다
+  }
+
   /** 색 밝기 곱 */
   tint(i: number, k: number): void {
     this.r0[i] *= k; this.g0[i] *= k; this.b0[i] *= k;
@@ -228,6 +239,9 @@ export class ParticlePool {
   streak(i: number, baseLen: number, perSpeed: number): void {
     this.mode[i] = 1; this.ln[i] = baseLen; this.st[i] = perSpeed;
   }
+
+  /** 바닥 아래로 못 가게 하되 미끄러지게 (먼지·연기 뭉치) */
+  slide(i: number, y: number): void { this.gy[i] = y; this.bnc[i] = -1; }
 
   /** 수명 일부를 미리 지난 것으로 */
   preAge(i: number, t: number): void { this.age[i] = Math.min(t, this.life[i] * 0.9); }
@@ -269,8 +283,11 @@ export class ParticlePool {
       pz[i] += vz[i] * dt + wz * wnd[i];
       if (py[i] < gy[i]) {
         py[i] = gy[i];
-        if (bnc[i] > 0 && vy[i] < -1.2) {
-          vy[i] = -vy[i] * bnc[i]; vx[i] *= 0.65; vz[i] *= 0.65;
+        const b = bnc[i];
+        if (b < 0) {
+          if (vy[i] < 0) vy[i] = 0; // 미끄러짐 (먼지 뭉치는 땅을 따라 계속 퍼진다)
+        } else if (b > 0 && vy[i] < -1.2) {
+          vy[i] = -vy[i] * b; vx[i] *= 0.65; vz[i] *= 0.65;
         } else {
           vy[i] = 0; vx[i] *= 0.3; vz[i] *= 0.3; rv[i] = 0;
         }

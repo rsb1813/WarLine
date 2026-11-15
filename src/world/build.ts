@@ -172,7 +172,7 @@ function buildHouse(p: BPlan, add: Add, r: () => number): void {
         if (ww < 0.6) continue;
         const a = c - ww / 2, b = c + ww / 2;
         if (a < clr || b > len - clr) continue;
-        if (ds && b + 0.4 > ds.a && a - 0.4 < ds.b) continue;
+        if (ds && b + 0.4 > ds.c - ds.w / 2 && a - 0.4 < ds.c + ds.w / 2) continue;
         if (r() > wn.p) continue;
         out.push({ a, b, door: false, h0: isHi ? Math.min(wn.h0, clearH - 2.0) : winH0, h1: isHi ? Math.min(wn.h1, clearH - 0.5) : winH1 });
       }

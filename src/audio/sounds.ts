@@ -589,8 +589,12 @@ export type CueKind =
   | 'click' | 'hover' | 'equip' | 'deploy' | 'win' | 'lose';
 
 export function cue(sr: number, kind: CueKind, v: number): Buf[] {
-  const dur: Partial<Record<CueKind, number>> = { win: 2.8, lose: 3.0, deploy: 0.9, flagGood: 0.8, flagBad: 0.9, head: 0.45, kill: 0.4 };
-  const o = new Float32Array(samples(sr, dur[kind] ?? 0.5));
+  const dur: Record<CueKind, number> = {
+    tick: 0.08, head: 0.45, kill: 0.36, armor: 0.22, spot: 0.2, lockBeep: 0.1, lockDone: 0.42, warnBeep: 0.1, warnHi: 0.1,
+    flagGood: 0.8, flagBad: 0.9, neutralGood: 0.5, neutralBad: 0.5, losing: 0.34, score: 0.06, heal: 0.3, revive: 0.45,
+    click: 0.06, hover: 0.04, equip: 0.3, deploy: 0.9, win: 2.8, lose: 3.0,
+  };
+  const o = new Float32Array(samples(sr, dur[kind]));
   const click = (g: number, f = 3000, seed = 2100) => { const c = white(samples(sr, 0.01), seed + v); envAD(c, sr, 0.0001, 0.0015); biquad(c, sr, 'hp', f); addTo(o, c, g); };
   switch (kind) {
     case 'tick': addTo(o, partials(sr, 0.06, [[3000, 1, 0.012], [4600, 0.4, 0.008]], 0.0003), 1); click(0.6, 4000); break;
