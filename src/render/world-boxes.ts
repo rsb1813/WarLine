@@ -211,7 +211,7 @@ export class BoxLayer {
 
     if (key === 'rubble') {
       const r = rng(b.id * 7919 + 13);
-      const cc = col.clone().multiplyScalar(0.85 + h1 * 0.25);
+      const cc = col.clone().lerp(new THREE.Color(0.3, 0.28, 0.26), 0.4).multiplyScalar(0.8 + h1 * 0.25);
       // 상자를 거의 덮는 큰 덩어리
       this.tmpE.set((r() - 0.5) * 0.25, r() * Math.PI * 2, (r() - 0.5) * 0.25);
       this.tmpQ.setFromEuler(this.tmpE);

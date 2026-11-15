@@ -642,15 +642,16 @@ function plantTrees(G: Gen, seed: number): void {
   const S = G.S, w = G.w, forest = clamp(G.def.forest, 0, 1);
   const want = clamp(Math.round((320 + 900 * forest) * (S / 600) ** 2), 250, 1400);
   const nF = fbm(seed + 91, 4);
-  const thr = 0.6 - 0.22 * forest;
+  // 숲 덩어리: 지도 15~35% 면적에 몰아서 심고, 나머지엔 드문드문
+  const thr = 0.6 - 0.1 * forest;
   const occ = G.occ, on = G.on;
   const th = G.def.theme;
   const tr = rng(seed ^ 0x2c1b3c6d);
   let made = 0;
-  for (let k = 0; k < want * 18 && made < want; k++) {
+  for (let k = 0; k < want * 45 && made < want; k++) {
     const x = 4 + tr() * (S - 8), z = 4 + tr() * (S - 8);
-    const d = smoothstep(thr, thr + 0.14, nF(x / 150, z / 150));
-    if (tr() > 0.035 + 0.965 * d) continue;
+    const d = smoothstep(thr, thr + 0.05, nF(x / 120, z / 120));
+    if (tr() > 0.012 + 0.988 * d) continue;
     const ci = Math.floor(x / OC), cj = Math.floor(z / OC);
     let free = true;
     for (let b = -1; b <= 1 && free; b++) for (let a = -1; a <= 1; a++) {

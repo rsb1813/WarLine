@@ -156,7 +156,7 @@ export class TreeLayer {
     const trunkMat = new THREE.MeshStandardMaterial({ map: barkTex(), roughness: 0.95, metalness: 0 });
     const branchMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, metalness: 0 });
     addSway(branchMat, sh, 0.02, 'branch');
-    const crownMat = new THREE.MeshStandardMaterial({ map: twigTex(), alphaTest: 0.35, roughness: 0.95, metalness: 0, side: THREE.DoubleSide, color: 0x8a7470 });
+    const crownMat = new THREE.MeshStandardMaterial({ map: twigTex(), alphaTest: 0.35, roughness: 0.95, metalness: 0, side: THREE.DoubleSide, color: 0x7e7072 });
     addSway(crownMat, sh, 0.03, 'crown');
     const defs: [Part, THREE.BufferGeometry, THREE.Material, boolean][] = [
       ['foliage', foliageGeo, foliageMat, true],

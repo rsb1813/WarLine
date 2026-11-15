@@ -207,7 +207,6 @@ export class PropsLayer {
   private _v2 = new THREE.Vector3();
   private _s = new THREE.Vector3();
   private _m = new THREE.Matrix4();
-  private _c = new THREE.Color();
   private fwd = new THREE.Vector3(0, 0, -1);
 
   constructor(private scene: THREE.Scene, quality: Quality) {
@@ -260,7 +259,7 @@ export class PropsLayer {
       const dx = p.pos.x - ctx.cam.x, dy = p.pos.y - ctx.cam.y, dz = p.pos.z - ctx.cam.z;
       if (dx * dx + dy * dy + dz * dz > maxD2) continue;
       if (!inView(ctx, p.pos.x, p.pos.y, p.pos.z, 1.2)) continue;
-      this.projectile(g, p, ctx);
+      this.projectile(p, ctx);
     }
     for (const p of this.allParts) p.end();
   }
@@ -273,7 +272,7 @@ export class PropsLayer {
     return this._q.setFromUnitVectors(this.fwd, v);
   }
 
-  private projectile(g: Game, p: Projectile, ctx: ActorCtx): void {
+  private projectile(p: Projectile, ctx: ActorCtx): void {
     const pos = this._v2.set(p.pos.x, p.pos.y, p.pos.z);
     switch (p.kind) {
       case 'rocket': case 'missile': {
@@ -324,7 +323,6 @@ export class PropsLayer {
       default:
         break;
     }
-    void g;
   }
 
   // ───────── 설치물 ─────────
@@ -466,6 +464,5 @@ export class PropsLayer {
     this.bladeGeo.dispose(); this.ledGeo.dispose();
     this.mat.dispose(); this.glow.dispose();
     this.items.clear(); this.pool.clear(); this.pgeo.clear(); this.postGeos.clear();
-    void this._c;
   }
 }
