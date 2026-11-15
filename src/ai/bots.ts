@@ -24,6 +24,8 @@ interface VMind {
   route: number[]; ri: number; routeT: number;
   attackUntil: number; attackCd: number;
   hpHist: number; hpT: number; boardT: number;
+  gx: number; gz: number; gFlag: number; gT: number;
+  stuckN: number; sx: number; sz: number; detUntil: number; detX: number; detZ: number;
 }
 interface AIState {
   nav: Nav;
@@ -32,7 +34,7 @@ interface AIState {
   pcache: Map<number, { pts: number[]; t: number }>;
   revClaim: Map<number, { by: number; until: number }>;
   vm: WeakMap<Vehicle, VMind>;
-  thinkBudget: number;
+  sweepT: number;
 }
 const STATE = new WeakMap<Game, AIState>();
 
@@ -151,6 +153,8 @@ function vmind(st: AIState, g: Game, v: Vehicle): VMind {
       route: [], ri: 0, routeT: -99,
       attackUntil: 0, attackCd: 0,
       hpHist: def ? v.hp : 0, hpT: 0, boardT: 0,
+      gx: v.pos.x, gz: v.pos.z, gFlag: -1, gT: -99,
+      stuckN: 0, sx: v.pos.x, sz: v.pos.z, detUntil: 0, detX: 0, detZ: 0,
     };
     st.vm.set(v, vm);
   }
@@ -164,7 +168,7 @@ export function initBots(g: Game): void {
   const mk = (): TeamCmd => ({ next: 0, orders: new Map(), leaders: new Map() });
   const st: AIState = {
     nav, teams: [mk(), mk()], cover: new Map(), pcache: new Map(), revClaim: new Map(),
-    vm: new WeakMap(), thinkBudget: 0,
+    vm: new WeakMap(), sweepT: 0,
   };
   STATE.set(g, st);
   for (const s of g.soldiers) if (!s.isPlayer) s.ai = newMind(g, s);
@@ -303,6 +307,8 @@ function flagCover(g: Game, st: AIState, fi: number): number[] {
 
 const candId: number[] = [];
 const candD: number[] = [];
+const vcId: number[] = [];
+const vcD: number[] = [];
 const T1 = tmpV(), T2 = tmpV();
 
 function occupantTeam(g: Game, v: Vehicle): number {
@@ -386,15 +392,25 @@ function perceive(g: Game, s: Soldier, m: Mind): void {
   const prevV = m.visV;
   m.visV = -1; m.visVD = 1e9;
   const vmax = 300;
+  vcId.length = 0; vcD.length = 0;
   for (const v of g.vehicles) {
     if (!hostileVehicle(g, s, v)) continue;
     const dx = v.pos.x - eye.x, dz = v.pos.z - eye.z, d = hyp(dx, dz);
-    if (d > vmax || d > m.visVD) continue;
+    if (d > vmax) continue;
     const def = vehDef(v);
     if (!(d < 25 || hurt || inVeh || (def && def.air) || dx * fx + dz * fz > fovCos * d)) continue;
+    let k = vcD.length;
+    vcD.push(d); vcId.push(v.id);
+    while (k > 0 && vcD[k - 1] > d) { vcD[k] = vcD[k - 1]; vcId[k] = vcId[k - 1]; k--; }
+    vcD[k] = d; vcId[k] = v.id;
+  }
+  // 가까운 차량부터 광선 3번까지
+  for (let k = 0; k < vcId.length && k < 3; k++) {
+    const v = g.vehicles[vcId[k]], def = vehDef(v);
     T1.x = v.pos.x; T1.y = v.pos.y + (def ? def.size.y * 0.55 : 1.5); T1.z = v.pos.z;
     if (!canSee(g, eye, T1)) continue;
-    m.visV = v.id; m.visVD = d;
+    m.visV = v.id; m.visVD = vcD[k];
+    break;
   }
   // 표적 갱신
   const df = DIFFS[g.opts.diff] ?? DIFFS.normal;
@@ -561,7 +577,8 @@ function pathStep(g: Game, st: AIState, s: Soldier, m: Mind, gx: number, gz: num
   if (think) {
     const moved = hyp(gx - m.pgx, gz - m.pgz) > (far > 40 ? 6 : 2.5);
     const atEnd = m.pi * 2 >= m.path.length;
-    if ((moved || m.repath || (atEnd && m.partial && far > 2) || m.path.length === 0) && (moved || g.time - m.pathT > 0.8)) {
+    const again = atEnd && m.partial && far > 4 && g.time - m.pathT > 2;
+    if ((moved || m.repath || again || m.path.length === 0) && (moved || g.time - m.pathT > 0.8)) {
       if (far < 2.5) { m.path = [gx, gz]; m.pi = 0; m.pgx = gx; m.pgz = gz; m.partial = false; m.repath = false; }
       else requestPath(g, st, s, m, gx, gz);
     }
@@ -728,7 +745,7 @@ function classActs(g: Game, st: AIState, s: Soldier, m: Mind): void {
   }
   // 유탄
   if (t && g.time > m.uglT && dT > 15 && dT < 90 && (m.cluster >= 1 || (!m.vis && g.time - m.seenT < 3))) {
-    m.uglT = g.time + 9 + rnd(g) * 8;
+    m.uglT = g.time + 14 + rnd(g) * 10;
     const k = slotOf(s, ['ugl']);
     if (k >= 0 && !friendNear(g, s, m.lk, 6)) {
       const aim = { x: m.lk.x, y: m.lk.y - 0.8, z: m.lk.z };
@@ -1092,6 +1109,8 @@ function infantryTick(g: Game, st: AIState, s: Soldier, m: Mind, c: Controls, dt
       } else moveK *= 0.7;
     }
     gunFire(g, s, m, c, tDist, onAim, dt);
+    // 보통·어려움: 중거리에서 쏠 때는 멈춰 선다 (이동 퍼짐을 피함)
+    if (c.fire && tDist > 28 && g.opts.diff !== 'easy' && m.task !== 'revive') moveK = 0;
     if (w && s.cur === 0 && s.held === 'weapon' && w.mag === 0 && tDist < 25 && s.swapT <= 0) {
       const p = s.weapons[1];
       if (p && p.mag > 0) { c.switchTo = 1; m.pistolT = g.time; }
@@ -1158,11 +1177,34 @@ function driveGround(g: Game, st: AIState, s: Soldier, m: Mind, v: Vehicle, vm: 
   const o = orderOf(g, st, s);
   const f = g.flags[o.flag];
   if (!f) return;
+  const nav = st.nav;
   const tracked = v.type !== 'ltv';
   if (g.time - vm.boardT < 3.5) return; // 포수·승객 기다리기
+  // 목표: 거점에서 가장 가까운, 차가 설 수 있는 칸
+  if (vm.gFlag !== o.flag || g.time - vm.gT > 20) {
+    // 차마다 거점 둘레의 다른 자리 (한 점에 몰려 서로 막지 않게)
+    const a = v.id * 2.399 + (s.team === 1 ? Math.PI : 0), r = Math.min(vm.standoff * 0.6, 18);
+    const ax = clamp(f.pos.x + Math.sin(a) * r, 6, g.world.size - 6), az = clamp(f.pos.z + Math.cos(a) * r, 6, g.world.size - 6);
+    const cc = nearestOpen(nav, cellOf(nav, ax, az), 16, true);
+    vm.gx = cc >= 0 ? (cc % nav.n + 0.5) * 2 : f.pos.x;
+    vm.gz = cc >= 0 ? (((cc / nav.n) | 0) + 0.5) * 2 : f.pos.z;
+    vm.gFlag = o.flag; vm.gT = g.time;
+  }
   const dF = hyp(f.pos.x - v.pos.x, f.pos.z - v.pos.z);
-  const stand = o.defend && f.owner === s.team ? Math.min(vm.standoff, 20) : vm.standoff;
-  if (dF < stand) {
+  const dA = hyp(vm.gx - v.pos.x, vm.gz - v.pos.z);
+  let stand = o.defend && f.owner === s.team ? Math.min(vm.standoff, 20) : vm.standoff;
+  if (g.time - m.seenT > 15 && g.time - Math.max(m.seenT, 0) > 15) stand *= 0.5; // 조용하면 더 다가간다
+  let ended = vm.pi * 2 >= vm.path.length && vm.path.length > 0;
+  if (ended && (vm.partial || !lineWalkable(nav, v.pos.x, v.pos.z, vm.gx, vm.gz, true)) && think && g.time - vm.pathT > 1.5) {
+    // 경로 끝: 더 갈 수 있는지 다시 찾아 보고, 제자리면 거기가 갈 수 있는 가장 가까운 곳
+    const r = findPath(nav, v.pos.x, v.pos.z, vm.gx, vm.gz, true, 4000);
+    if (r) {
+      vm.pathT = g.time;
+      if (r.pts.length >= 2 && hyp(r.pts[r.pts.length - 2] - v.pos.x, r.pts[r.pts.length - 1] - v.pos.z) > 8) { vm.path = r.pts; vm.pi = 0; vm.partial = r.partial; ended = false; }
+    }
+  }
+  const stuckEnd = ended && (vm.partial || !lineWalkable(nav, v.pos.x, v.pos.z, vm.gx, vm.gz, true));
+  if (dF < stand || dA < 7 || stuckEnd) {
     // 화력 지원 위치에서 버티며 차체 앞을 위협 쪽으로
     const thr = m.visV >= 0 ? g.vehicles[m.visV] : m.tgt >= 0 && m.vis ? g.soldiers[m.tgt] : null;
     if (thr && tracked) {
@@ -1172,10 +1214,12 @@ function driveGround(g: Game, st: AIState, s: Soldier, m: Mind, v: Vehicle, vm: 
     vm.stuckT = 0;
     return;
   }
-  vehiclePath(g, st, v, vm, f.pos.x, f.pos.z, think);
+  const detour = g.time < vm.detUntil;
+  vehiclePath(g, st, v, vm, detour ? vm.detX : vm.gx, detour ? vm.detZ : vm.gz, think);
   while (vm.pi * 2 < vm.path.length && hyp(vm.path[vm.pi * 2] - v.pos.x, vm.path[vm.pi * 2 + 1] - v.pos.z) < 6) vm.pi++;
-  const wx = vm.pi * 2 < vm.path.length ? vm.path[vm.pi * 2] : f.pos.x;
-  const wz = vm.pi * 2 < vm.path.length ? vm.path[vm.pi * 2 + 1] : f.pos.z;
+  const wx = vm.pi * 2 < vm.path.length ? vm.path[vm.pi * 2] : detour ? vm.detX : vm.gx;
+  const wz = vm.pi * 2 < vm.path.length ? vm.path[vm.pi * 2 + 1] : detour ? vm.detZ : vm.gz;
+  if (detour && hyp(vm.detX - v.pos.x, vm.detZ - v.pos.z) < 6) vm.detUntil = 0;
   const err = angleDiff(v.yaw, Math.atan2(-(wx - v.pos.x), -(wz - v.pos.z)));
   if (g.time < vm.revUntil) {
     c.mz = -0.85;
@@ -1186,9 +1230,28 @@ function driveGround(g: Game, st: AIState, s: Soldier, m: Mind, v: Vehicle, vm: 
   c.mx = clamp(-err * 2, -1, 1);
   c.mz = ae > 1.2 ? (tracked ? 0.1 : 0.4) : clamp(1 - ae * 0.55, 0.35, 1);
   if (dF - stand < 25) c.mz *= 0.6;
-  if (c.mz > 0.3 && Math.abs(v.speed) < 0.8) {
+  // 바로 앞 아군 차량에 들이받지 않기
+  const fw = forwardXZ(v.yaw);
+  for (const o2 of g.vehicles) {
+    if (o2 === v || !o2.alive || vehDef(o2)?.air) continue;
+    const dx = o2.pos.x - v.pos.x, dz = o2.pos.z - v.pos.z, d = hyp(dx, dz);
+    if (d < 11 && (dx * fw.x + dz * fw.z) > d * 0.7) { c.mz = Math.min(c.mz, d < 7 ? 0 : 0.3); break; }
+  }
+  if ((c.mz > 0.3 || (c.mz === 0 && ae < 1.2)) && Math.abs(v.speed) < 0.8) {
     vm.stuckT += dt;
-    if (vm.stuckT > 2.5) { vm.stuckT = 0; vm.revUntil = g.time + 1.4 + rnd(g); vm.pathT = -99; vm.path = []; }
+    if (vm.stuckT > (c.mz === 0 ? 6 : 2.5)) {
+      vm.stuckT = 0; vm.revUntil = g.time + 1.4 + rnd(g); vm.pathT = -99; vm.path = [];
+      if (hyp(v.pos.x - vm.sx, v.pos.z - vm.sz) > 25) vm.stuckN = 0;
+      vm.stuckN++; vm.sx = v.pos.x; vm.sz = v.pos.z;
+      if (vm.stuckN >= 6) { c.exit = true; vm.stuckN = 0; return; } // 도저히 못 빠져나오면 내려서 걷는다
+      if (vm.stuckN >= 3) {
+        // 옆으로 돌아가기
+        const a = v.yaw + (rnd(g) < 0.5 ? 1 : -1) * (Math.PI / 2 + (rnd(g) - 0.5));
+        const r = 20 + rnd(g) * 15, fw = forwardXZ(a);
+        const cc = nearestOpen(nav, cellOf(nav, v.pos.x + fw.x * r, v.pos.z + fw.z * r), 6, true);
+        if (cc >= 0) { vm.detX = (cc % nav.n + 0.5) * 2; vm.detZ = (((cc / nav.n) | 0) + 0.5) * 2; vm.detUntil = g.time + 9; }
+      }
+    }
   } else vm.stuckT = 0;
 }
 
@@ -1350,9 +1413,8 @@ function vehicleTick(g: Game, st: AIState, s: Soldier, m: Mind, c: Controls, dt:
 
 // ───────────────────────── 매 스텝 ─────────────────────────
 
-let claimSweep = 0;
 /** 진단용: 봇 갱신에 쓴 시간 (ms) */
-export const aiStats = { last: 0, worst: 0, total: 0, frames: 0 };
+export const aiStats = { last: 0, worst: 0, total: 0, frames: 0, slow: 0, navWorst: 0, expWorst: 0 };
 const now = (): number => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
 export function updateBots(g: Game, dt: number): void {
@@ -1361,16 +1423,20 @@ export function updateBots(g: Game, dt: number): void {
   const d = now() - t0;
   aiStats.last = d; aiStats.total += d; aiStats.frames++;
   if (d > aiStats.worst) aiStats.worst = d;
+  if (d > 2) aiStats.slow++;
 }
 
 function updateAll(g: Game, dt: number): void {
   let st = STATE.get(g);
   if (!st) { initBots(g); st = STATE.get(g); if (!st) return; }
+  const tn = now();
   navFrame(st.nav);
+  const dn = now() - tn;
+  if (dn > aiStats.navWorst) aiStats.navWorst = dn;
   if (g.time >= st.teams[0].next) commander(g, st, 0);
   if (g.time >= st.teams[1].next) commander(g, st, 1);
-  if (g.time > claimSweep) {
-    claimSweep = g.time + 10;
+  if (g.time > st.sweepT) {
+    st.sweepT = g.time + 10;
     for (const [k, v] of st.revClaim) if (v.until < g.time) st.revClaim.delete(k);
   }
   let thinkLeft = 18;
@@ -1406,4 +1472,11 @@ function updateAll(g: Game, dt: number): void {
       infantryTick(g, st, s, m, c, dt, think);
     }
   }
+  if (st.nav.frameExp > aiStats.expWorst) aiStats.expWorst = st.nav.frameExp;
+}
+
+/** 진단용: 차량의 봇 상태 */
+export function vehicleMind(g: Game, v: Vehicle): unknown {
+  const st = STATE.get(g);
+  return st ? st.vm.get(v) ?? null : null;
 }

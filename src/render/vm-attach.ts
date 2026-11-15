@@ -180,7 +180,7 @@ export function buildOptic(c: GunCtx): void {
     for (const sx of [-1, 1]) k.box(og, 0.002, 0.004, 0.006, m.rubber, sx * 0.0125, baseTop + 0.004, oz + 0.008, 0.0006);
     glassPlane(c, og, 0.021, 0.016, 0, wy, oz - 0.0126, 0x6a3a20, 0.18);
     reticlePlane(c, og, 'dot', 0.012, 0, wy, oz - 0.0114);
-    sightY = wy; sightZ = oz + 0.021; eye = L.pistol ? 0.22 : 0.13;
+    sightY = wy; sightZ = oz + 0.021; eye = L.pistol ? 0.22 : 0.15;
     span = [oz - 0.022, oz + 0.022];
   } else if (type === 'tube') {
     k.box(og, 0.026, 0.016, 0.034, m.dark, 0, b + 0.008, oz, 0.002);
@@ -199,7 +199,7 @@ export function buildOptic(c: GunCtx): void {
     // flipped-up front lens cap
     const cap = k.mesh(og, new THREE.CylinderGeometry(0.0175, 0.0175, 0.003, 18), m.rubber, 0, ty + 0.03, oz - 0.04);
     cap.rotation.x = 0.25;
-    sightY = ty; sightZ = oz + 0.04; eye = 0.11;
+    sightY = ty; sightZ = oz + 0.04; eye = 0.13;
     span = [oz - 0.04, oz + 0.04];
   } else if (type === 'holo') {
     clamp(c, og, b, oz + 0.01, 0.034, 0.04, 0.004);
@@ -213,7 +213,7 @@ export function buildOptic(c: GunCtx): void {
     glassPlane(c, og, 0.028, 0.024, 0, wy, oz - 0.04, 0x5a4a2a, 0.2);
     glassPlane(c, og, 0.028, 0.024, 0, wy, oz + 0.035, 0x2a4a66, 0.1);
     reticlePlane(c, og, 'holo', 0.022, 0, wy, oz - 0.0385);
-    sightY = wy; sightZ = oz + 0.044; eye = 0.11;
+    sightY = wy; sightZ = oz + 0.044; eye = 0.13;
     span = [oz - 0.044, oz + 0.044];
   } else if (type === 'prism') {
     const len = (a?.model?.len ?? 0.1) / 0.1;
@@ -323,14 +323,16 @@ function irons(c: GunCtx, og: THREE.Group): { y: number; z: number; eye: number 
   const zr = L.rearIronZ;
   // rear: flip-up aperture
   k.box(og, 0.024, 0.007, 0.022, m.dark, 0, b + 0.0035, zr, 0.0015);
-  const ear = sy + 0.009 - b;
-  for (const sx of [-1, 1]) k.box(og, 0.0038, ear, 0.012, m.dark, sx * 0.0098, b + ear / 2, zr, 0.001);
-  const ar = shot ? 0.0058 : 0.0042, at = shot ? 0.0022 : 0.0016;
+  const ear = sy + 0.008 - b;
+  for (const sx of [-1, 1]) {
+    const e = k.box(og, 0.003, ear, 0.011, m.dark, sx * 0.0095, b + ear / 2, zr, 0.001);
+    e.rotation.z = sx * 0.06;
+  }
+  const ar = shot ? 0.0056 : 0.0038, at = shot ? 0.002 : 0.0013;
   k.mesh(og, torusGeo(ar, at, 8, 22), m.dark, 0, sy, zr);
   const fr = ar + at;
-  k.box(og, 0.012, Math.max(0.002, sy - fr - b - 0.006), 0.003, m.dark, 0, b + 0.006 + (sy - fr - b - 0.006) / 2, zr);
-  k.box(og, fr * 2 + 0.004, 0.0025, 0.003, m.dark, 0, sy + fr + 0.001, zr);
-  for (const sx of [-1, 1]) k.box(og, 0.0026, fr * 2 + 0.002, 0.003, m.dark, sx * (fr + 0.0006), sy, zr);
+  k.box(og, 0.007, Math.max(0.002, sy - fr - b - 0.006), 0.0025, m.dark, 0, b + 0.006 + (sy - fr - b - 0.006) / 2, zr);
+  k.box(og, 0.012, 0.004, 0.0025, m.dark, 0, b + 0.008, zr);
   k.tubeX(og, 0.0042, 0.005, m.dark, 0.0145, b + 0.008, zr + 0.004, 10);
   // front post
   const zf = L.frontIronZ;
@@ -355,7 +357,7 @@ function irons(c: GunCtx, og: THREE.Group): { y: number; z: number; eye: number 
     }
     k.box(c.root, 0.0022, sy - b - 0.0045, 0.0024, m.dark, 0, (b + 0.004 + sy - 0.0005) / 2, zf);
   }
-  return { y: sy, z: zr, eye: shot ? 0.1 : 0.085 };
+  return { y: sy, z: zr, eye: shot ? 0.12 : 0.11 };
 }
 
 // ───────────────────────── underbarrel ─────────────────────────

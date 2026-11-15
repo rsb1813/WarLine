@@ -9,14 +9,14 @@ export interface PoseDef { f: [number, number, number][]; t: [number, number, nu
 const P = (a: [number, number, number], b: [number, number, number], c: [number, number, number], d: [number, number, number], t: [number, number, number, number], spread = 0): PoseDef => ({ f: [a, b, c, d], t, spread });
 
 export const POSES: Record<string, PoseDef> = {
-  grip: P([-0.3, -1.0, -0.5], [-1.4, -1.45, -0.85], [-1.42, -1.45, -0.85], [-1.45, -1.4, -0.8], [0.62, -0.55, -0.45, -0.5], 0.02),
+  grip: P([-0.3, -1.0, -0.5], [-1.4, -1.45, -0.85], [-1.42, -1.45, -0.85], [-1.45, -1.4, -0.8], [0.12, -0.85, -0.25, -0.2], 0.02),
   wrap: P([-1.0, -1.0, -0.55], [-1.05, -1.0, -0.6], [-1.08, -1.0, -0.6], [-1.12, -1.0, -0.55], [0.42, -0.18, -0.18, -0.15], 0.04),
-  vgrip: P([-1.35, -1.45, -0.9], [-1.4, -1.5, -0.9], [-1.42, -1.5, -0.9], [-1.45, -1.45, -0.85], [0.6, -0.6, -0.55, -0.5], 0.0),
+  vgrip: P([-1.35, -1.45, -0.9], [-1.4, -1.5, -0.9], [-1.42, -1.5, -0.9], [-1.45, -1.45, -0.85], [0.25, -0.9, -0.35, -0.3], 0.0),
   hook: P([-0.9, -1.35, -0.8], [-0.95, -1.35, -0.8], [-1.0, -1.3, -0.75], [-1.05, -1.25, -0.7], [0.3, -0.2, -0.3, -0.3], 0.02),
   pinch: P([-0.65, -0.9, -0.55], [-0.8, -1.0, -0.6], [-1.3, -1.4, -0.85], [-1.35, -1.35, -0.8], [0.85, -0.7, -0.5, -0.4], 0.03),
   cup: P([-0.5, -0.5, -0.3], [-0.5, -0.5, -0.3], [-0.55, -0.5, -0.3], [-0.6, -0.5, -0.3], [0.4, -0.3, -0.2, -0.2], 0.06),
   flat: P([-0.35, -0.35, -0.2], [-0.35, -0.35, -0.2], [-0.4, -0.35, -0.2], [-0.45, -0.35, -0.2], [0.5, -0.3, -0.1, -0.1], 0.05),
-  fist: P([-1.45, -1.55, -1.0], [-1.5, -1.55, -1.0], [-1.5, -1.55, -1.0], [-1.5, -1.5, -0.95], [0.7, -0.8, -0.7, -0.5], 0.0),
+  fist: P([-1.45, -1.55, -1.0], [-1.5, -1.55, -1.0], [-1.5, -1.55, -1.0], [-1.5, -1.5, -0.95], [0.3, -0.9, -0.4, -0.3], 0.0),
   grenade: P([-0.95, -0.8, -0.5], [-0.9, -0.75, -0.5], [-0.95, -0.8, -0.5], [-1.0, -0.85, -0.5], [0.75, -0.5, -0.5, -0.3], 0.12),
   relax: P([-0.55, -0.7, -0.4], [-0.6, -0.75, -0.4], [-0.65, -0.75, -0.4], [-0.7, -0.75, -0.4], [0.5, -0.3, -0.3, -0.2], 0.06),
 };
@@ -43,12 +43,17 @@ export class Hand {
   private thumbBase = new THREE.Group();
   private thumbJ: THREE.Group[] = [];
   private geos: THREE.BufferGeometry[] = [];
+  private gloveMeshes: THREE.Mesh[] = [];
   /** attachment point for held items (grenade during throw) */
   readonly holdPoint = new THREE.Object3D();
 
   constructor(readonly left: boolean, glove: THREE.Material, armor: THREE.Material, cuff: THREE.Material) {
     const rb = (w: number, h: number, d: number, r: number) => { const g = new RoundedBoxGeometry(w, h, d, 2, Math.min(r, w / 2 - 1e-4, h / 2 - 1e-4, d / 2 - 1e-4)); this.geos.push(g); return g; };
-    const mesh = (parent: THREE.Object3D, g: THREE.BufferGeometry, m: THREE.Material, x = 0, y = 0, z = 0) => { const o = new THREE.Mesh(g, m); o.position.set(x, y, z); parent.add(o); return o; };
+    const mesh = (parent: THREE.Object3D, g: THREE.BufferGeometry, m: THREE.Material, x = 0, y = 0, z = 0) => {
+      const o = new THREE.Mesh(g, m); o.position.set(x, y, z); parent.add(o);
+      if (m === glove) this.gloveMeshes.push(o);
+      return o;
+    };
     if (left) this.root.scale.x = -1;
     // palm + back panel + knuckle armour
     mesh(this.root, rb(0.084, 0.03, 0.09, 0.012), glove, 0, 0, 0.002);
@@ -91,6 +96,8 @@ export class Hand {
     this.apply();
   }
 
+  setGlove(m: THREE.Material): void { for (const o of this.gloveMeshes) o.material = m; }
+
   /** move finger params toward a target vector */
   pose(target: number[], rate: number, dt: number): void {
     const k = 1 - Math.exp(-rate * dt);
@@ -124,10 +131,10 @@ export class Arm {
   private static Y = new THREE.Vector3(0, 1, 0);
 
   constructor(public mat: THREE.Material, readonly lenU = 0.3, readonly lenF = 0.28) {
-    const ug = new THREE.CylinderGeometry(0.05, 0.056, 1, 16, 1, true); ug.translate(0, 0.5, 0);
-    const fg = new THREE.CylinderGeometry(0.039, 0.05, 1, 16, 1, true); fg.translate(0, 0.5, 0);
-    const eg = new THREE.SphereGeometry(0.05, 14, 10);
-    const rg = new THREE.TorusGeometry(0.039, 0.007, 6, 16); rg.rotateX(Math.PI / 2);
+    const ug = new THREE.CylinderGeometry(0.047, 0.054, 1, 16, 1, true); ug.translate(0, 0.5, 0);
+    const fg = new THREE.CylinderGeometry(0.036, 0.046, 1, 16, 1, true); fg.translate(0, 0.5, 0);
+    const eg = new THREE.SphereGeometry(0.047, 14, 10);
+    const rg = new THREE.TorusGeometry(0.037, 0.0065, 6, 16); rg.rotateX(Math.PI / 2);
     this.geos.push(ug, fg, eg, rg);
     this.upper = new THREE.Mesh(ug, mat); this.fore = new THREE.Mesh(fg, mat); this.elbow = new THREE.Mesh(eg, mat); this.ring = new THREE.Mesh(rg, mat);
     this.group.add(this.upper, this.fore, this.elbow, this.ring);

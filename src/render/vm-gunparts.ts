@@ -14,6 +14,7 @@ export interface GunMats {
   poly: THREE.Material;      // polymer furniture (body colour)
   polyDark: THREE.Material;  // near-black polymer (mags, pads)
   accent: THREE.Material;    // anodised accent colour parts
+  accentDark: THREE.Material; // muted accent for large surfaces (chassis)
   accentPoly: THREE.Material;
   grip: THREE.Material;      // stippled grip polymer
   rubber: THREE.Material;
@@ -33,6 +34,7 @@ export function gunMats(spec: GunModelSpec): GunMats {
     poly: M.polymer(M.shade(c, 0.92), 0.82),
     polyDark: M.polymer(0x1c1d1e, 0.78),
     accent: M.metal(spec.accent, 0.42, 0.55),
+    accentDark: M.metal(M.shade(spec.accent, 0.45), 0.5, 0.55),
     accentPoly: M.polymer(spec.accent, 0.75),
     grip: M.stippled(M.shade(c, 0.85)),
     rubber: M.rubber(0x141414),

@@ -19,9 +19,8 @@ export function barrelMods(c: GunCtx): { mul: number; size: number; fluted: bool
 
 /** support (left) hand under a handguard with section half sizes hw/hh centred at (0, cy), palm at z */
 export function supportHand(cy: number, hw: number, hh: number, z: number): HandSpec {
-  const nx = 0.45, ny = 0.893;
-  const r = Math.max(hw, hh) * 0.9 + 0.0155;
-  return { pos: [-nx * r, cy - ny * r, z + 0.01], f: [0.55, -0.27, -0.8], n: [nx, ny, 0], pose: 'wrap' };
+  // palm cradles the handguard from below-left, hand continues the forearm line (forward-up), fingers wrap the right side
+  return { pos: [-hw * 0.45, cy - hh - 0.0135, z + 0.012], f: [0.3, 0.35, -0.89], n: [0.32, 0.88, 0.34], pose: 'wrap' };
 }
 
 function baseLay(): Lay {
@@ -73,7 +72,6 @@ export function bodyRifle(c: GunCtx, v: 'rifle' | 'dmr' | 'smg'): void {
   k.box(ch, 0.012, 0.007, 0.03, m.dark, 0, upY1 - 0.006, recB + 0.004, 0.0015);
   k.box(ch, 0.046, 0.008, 0.012, m.dark, 0, upY1 - 0.006, recB + 0.018, 0.003);
   k.box(ch, 0.011, 0.007, 0.012, m.accent, -0.021, upY1 - 0.006, recB + 0.017, 0.002);
-  handAnchor(ch, { pos: [-0.006, upY1 + 0.006, recB + 0.045], f: [1, 0, 0], n: [0, -0.25, -1], pose: 'hook' }, 'chargeHand');
   c.ud.charge = ch;
 
   // ── lower receiver with magwell
@@ -87,8 +85,14 @@ export function bodyRifle(c: GunCtx, v: 'rifle' | 'dmr' | 'smg'): void {
     k.span(P, lowW + 0.005, -0.033, -0.025, m0 + 0.001, m1 - 0.001, m.rec, 0, 0.002);                // magwell flare
     k.tubeX(P, 0.0035, 0.004, m.accent, lowW / 2 + 0.0015, 0.012, m1 + 0.007, 10);                    // mag release
     k.box(P, 0.003, 0.012, 0.009, m.dark, -lowW / 2 - 0.0015, 0.021, m1 + 0.005, 0.001);              // bolt catch
+    // empty reloads: the support hand slaps the bolt catch
+    handAnchor(P, { pos: [-lowW / 2 - 0.02, 0.012, m1 + 0.03], f: [0.15, 0.55, -0.82], n: [1, -0.1, 0.2], pose: 'flat' }, 'chargeHand');
+    c.ud.boltRelease = true;
   } else {
     k.side(P, [[recF + 0.012, upY0], [recB - 0.002, upY0], [recB - 0.002, upY0 - 0.026], [recB - 0.03, 0.006], [0.03, 0.0], [-0.075, 0.0], [recF + 0.01, upY0 - 0.02]], lowW, m.rec, 0, 0.0025);
+    // side cocking handle used on empty reloads of the top-fed smg
+    handAnchor(ch, { pos: [-upW / 2 - 0.03, boreY - 0.004, recF + 0.03], f: [0.2, 0.1, -1], n: [1, 0, 0.1], pose: 'hook' }, 'chargeHand');
+    k.box(ch, 0.012, 0.008, 0.014, m.dark, -upW / 2 - 0.006, boreY, recF + 0.03, 0.002);
   }
   // selector + takedown pins
   k.tubeX(P, 0.0045, 0.003, m.dark, -lowW / 2 - 0.0015, 0.031, 0.026, 10);
@@ -122,7 +126,7 @@ export function bodyRifle(c: GunCtx, v: 'rifle' | 'dmr' | 'smg'): void {
   L.ugY = hgCY - hgH / 2;
   L.ugMinZ = hgF + 0.02; L.ugMaxZ = recF - 0.03;
   L.sideX = hgW / 2; L.sideY = hgCY; L.sideZ = hgF + 0.035;
-  L.leftHand = supportHand(hgCY, hgW / 2, hgH / 2, hgF + clamp(hgLen * 0.3, 0.05, 0.095));
+  L.leftHand = supportHand(hgCY, hgW / 2, hgH / 2, hgF + clamp(hgLen * 0.42, 0.05, 0.14));
 
   // ── magazine
   if (topMag) {
@@ -374,7 +378,7 @@ export function bodySniper(c: GunCtx): void {
   const magZ = -0.1;
   // chassis centre section
   k.side(P, [[-0.205, boreY], [0.112, boreY], [0.112, 0.004], [0.075, 0.0], [-0.004, 0.0], [-0.062, 0.0], [-0.064, -0.012],
-    [-0.138, -0.012], [-0.142, 0.006], [-0.205, 0.014]], 0.052, m.accent, 0, 0.004);
+    [-0.138, -0.012], [-0.142, 0.006], [-0.205, 0.014]], 0.052, m.accentDark, 0, 0.004);
   k.box(P, 0.054, 0.012, 0.06, m.rec, 0, boreY - 0.012, -0.17, 0.003);
   // action
   k.tubeZ(P, actR, actR, actF, actB, m.steel, 0, boreY, 22);
@@ -397,7 +401,7 @@ export function bodySniper(c: GunCtx): void {
   const fF = -0.2 - fLen, fcy = boreY - 0.006;
   k.front(P, rrect(0, fcy, 0.054, 0.056, 0.016, 2), fLen, m.rec, -0.2 - fLen / 2, 0.002);
   mlokSlots(c, P, fF + 0.015, -0.21, fcy, 0.027, 0.028);
-  k.front(P, rrect(0, fcy, 0.056, 0.058, 0.017, 2), 0.008, m.accent, fF + 0.004, 0.001, [circlePts(0, boreY, L.barR * 1.2, 14).reverse()]);
+  k.front(P, rrect(0, fcy, 0.056, 0.058, 0.017, 2), 0.008, m.accentDark, fF + 0.004, 0.001, [circlePts(0, boreY, L.barR * 1.2, 14).reverse()]);
   // grip, guard, mag
   triggerGuard(c, P, -0.062, -0.004, 0.002, 0.026, m.steel);
   const rh = pistolGrip(c, P, { tilt: 0.24, z0: -0.004, top: 0.004, thick: 0.03, depth: 0.046 });
@@ -457,7 +461,7 @@ function sniperStock(c: GunCtx, z0: number, boreY: number): void {
     // lower skeleton member
     const outer: [number, number][] = [[z0 + 0.02, boreY - 0.03], [se - 0.01, boreY - 0.02], [se, -0.07], [se - 0.05, -0.074], [z0 + 0.05, -0.02], [z0 + 0.02, -0.012]];
     const hole: [number, number][] = [[z0 + 0.06, boreY - 0.04], [se - 0.03, boreY - 0.03], [se - 0.022, -0.05], [se - 0.05, -0.058], [z0 + 0.07, -0.02]];
-    k.side(P, outer, 0.018, m.accent, 0, 0.003, [hole.reverse() as [number, number][]]);
+    k.side(P, outer, 0.018, m.accentDark, 0, 0.003, [hole.reverse() as [number, number][]]);
     // monopod
     k.tubeY(P, 0.006, 0.006, 0.036, m.steel, 0, -0.088, se - 0.045);
     k.tubeY(P, 0.009, 0.009, 0.008, m.dark, 0, -0.07, se - 0.045);

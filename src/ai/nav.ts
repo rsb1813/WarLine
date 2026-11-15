@@ -13,7 +13,9 @@ const V_CLR = 2.5;
 const BAND_LO = 0.5, BAND_HI = 1.7;
 const MAX_STEP_ORTH = 1.3, MAX_STEP_DIAG = 1.8, V_MAX_STEP = 1.0;
 
-const F_BLOCK = 1, F_DIRTY = 2, F_BRIDGE = 4, F_WET = 8;
+const F_BLOCK = 1, F_DIRTY = 2, F_BRIDGE = 4, F_WET = 8, F_SURF = 16;
+/** 상자 디딤면(바닥·다리) 끼리·땅과의 턱: 몸은 0.5m 까지만 올라선다 */
+const SURF_STEP = 0.6, V_SURF_STEP = 0.7;
 
 const DX = [1, 1, 0, -1, -1, -1, 0, 1];
 const DZ = [0, 1, 1, 1, 0, -1, -1, -1];
@@ -36,10 +38,14 @@ export interface Nav {
 
 export interface PathResult { pts: number[]; partial: boolean }
 
-const isSurface = (b: Box): boolean => b.kind === 'floor' || b.kind === 'bridge';
+/** 디딤면: 얇고 넓은 바닥·다리 상판 (다리 난간처럼 높고 좁은 것은 장애물) */
+const isSurface = (b: Box): boolean => (b.kind === 'floor' || b.kind === 'bridge') && b.max.y - b.min.y <= 1.0
+  && Math.min(b.max.x - b.min.x, b.max.z - b.min.z) >= 1.2;
 const blocksInf = (b: Box): boolean => b.alive && b.solid && !isSurface(b);
-const blocksVeh = (b: Box): boolean => b.alive && b.solid && !isSurface(b) && b.kind !== 'tree' && b.kind !== 'fence' && b.kind !== 'window'
-  && !(b.kind === 'rubble' && b.max.y - b.min.y < 0.9);
+/** 차량이 들이받아 부수는 약한 상자 (sim-vehicles 의 isWeak 와 같은 기준) */
+const weakForVeh = (b: Box): boolean => b.destructible && (b.kind === 'fence' || b.kind === 'window' || b.kind === 'tree' || b.kind === 'sandbag'
+  || b.kind === 'prop' || b.kind === 'cover' || (b.kind === 'wall' && (b.mat === 'wood' || b.mat === 'glass' || b.mat === 'foliage')));
+const blocksVeh = (b: Box): boolean => b.alive && b.solid && !isSurface(b) && !weakForVeh(b);
 
 export function createNav(w: World): Nav {
   const n = Math.ceil(w.size / CELL);
@@ -170,15 +176,17 @@ function rebuildRegion(nav: Nav, i0: number, j0: number, i1: number, j1: number)
     for (let j = c0; j <= c1; j++) for (let i = a0; i <= a1; i++) {
       const c = i + j * n, top = b.max.y, h = terr[c];
       if (b.kind === 'bridge') {
-        if (top <= h + 14 && top >= h - 0.5 && (!(flags[c] & F_BRIDGE) || top > base[c])) { base[c] = top; flags[c] |= F_BRIDGE; }
+        if (top <= h + 14 && top >= h - 0.5 && (!(flags[c] & F_BRIDGE) || top > base[c])) { base[c] = top; flags[c] |= F_BRIDGE | F_SURF; }
       } else if (top <= h + 2.0 && top >= h - 0.6 && !(flags[c] & F_BRIDGE)) {
-        if (top > base[c] || base[c] === h) base[c] = Math.max(top, h);
+        if (top > base[c] || base[c] === h) { base[c] = Math.max(top, h); flags[c] |= F_SURF; }
       }
     }
   }
   // 2) 물
   for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
     const c = i + j * n;
+    // sim-vehicles 는 다리 위에서도 지형 기준 물 깊이로 차량을 막는다: 그대로 따른다
+    if (w.water - terr[c] > 1.0) vblock[c] = 1;
     if (flags[c] & F_BRIDGE) continue;
     const depth = w.water - base[c];
     if (depth > 1.0) flags[c] |= F_BLOCK;
@@ -206,7 +214,7 @@ function rebuildRegion(nav: Nav, i0: number, j0: number, i1: number, j1: number)
       const c0 = Math.max(j0, Math.ceil(ez0 / CELL - 0.5)), c1 = Math.min(j1, Math.floor(ez1 / CELL - 0.5));
       for (let j = c0; j <= c1; j++) for (let i = a0; i <= a1; i++) {
         const c = i + j * n, bs = base[c];
-        if (b.max.y <= bs + 0.4 || b.min.y >= bs + 3.2) continue;
+        if (b.max.y <= bs + 0.85 || b.min.y >= bs + 3.2) continue; // 낮은 턱은 넘어간다
         vblock[c] = 1;
       }
     }
@@ -216,8 +224,7 @@ function rebuildRegion(nav: Nav, i0: number, j0: number, i1: number, j1: number)
     const c = i + j * n;
     if (i === 0 || j === 0 || i === n - 1 || j === n - 1) { vblock[c] = 1; continue; }
     if (vblock[c]) continue;
-    const b0 = base[c];
-    if (Math.abs(base[c + 1] - b0) > V_MAX_STEP || Math.abs(base[c - 1] - b0) > V_MAX_STEP || Math.abs(base[c + n] - b0) > V_MAX_STEP || Math.abs(base[c - n] - b0) > V_MAX_STEP) vblock[c] = 1;
+    if (!stepOK(nav, c, c + 1, false, true) || !stepOK(nav, c, c - 1, false, true) || !stepOK(nav, c, c + n, false, true) || !stepOK(nav, c, c - n, false, true)) vblock[c] = 1;
   }
   // 5) 대표점 1차: 가운데가 비면 가운데, 아니면 비어 있는 첫 표본
   for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
@@ -247,7 +254,7 @@ function rebuildRegion(nav: Nav, i0: number, j0: number, i1: number, j1: number)
         if (ni < 0 || nj < 0 || ni >= n || nj >= n) continue;
         const nc = ni + nj * n;
         if (flags[nc] & F_BLOCK) continue;
-        if (Math.abs(base[nc] - base[c]) > ((d & 1) ? MAX_STEP_DIAG : MAX_STEP_ORTH)) continue;
+        if (!stepOK(nav, c, nc, (d & 1) === 1, false)) continue;
         if (segClear(nav, c, nc, px, pz, repX[nc], repZ[nc])) s += 1;
       }
       s -= Math.hypot(px - cx, pz - cz) * 0.05;
@@ -261,8 +268,14 @@ function rebuildRegion(nav: Nav, i0: number, j0: number, i1: number, j1: number)
   for (let j = f0; j <= f1; j++) for (let i = e0; i <= e1; i++) computeEdges(nav, i, j);
 }
 
+function stepOK(nav: Nav, a: number, b: number, diag: boolean, veh: boolean): boolean {
+  const d = Math.abs(nav.base[a] - nav.base[b]);
+  if ((nav.flags[a] | nav.flags[b]) & F_SURF) return d <= (veh ? V_SURF_STEP : SURF_STEP);
+  return d <= (veh ? (diag ? V_MAX_STEP * 1.4 : V_MAX_STEP) : diag ? MAX_STEP_DIAG : MAX_STEP_ORTH);
+}
+
 function computeEdges(nav: Nav, i: number, j: number): void {
-  const n = nav.n, c = i + j * n, { flags, base, repX, repZ } = nav;
+  const n = nav.n, c = i + j * n, { flags, repX, repZ } = nav;
   let m = 0;
   if (!(flags[c] & F_BLOCK)) {
     for (let d = 0; d < 8; d++) {
@@ -270,7 +283,7 @@ function computeEdges(nav: Nav, i: number, j: number): void {
       if (ni < 0 || nj < 0 || ni >= n || nj >= n) continue;
       const nc = ni + nj * n;
       if (flags[nc] & F_BLOCK) continue;
-      if (Math.abs(base[nc] - base[c]) > ((d & 1) ? MAX_STEP_DIAG : MAX_STEP_ORTH)) continue;
+      if (!stepOK(nav, c, nc, (d & 1) === 1, false)) continue;
       if (((flags[c] | flags[nc]) & F_DIRTY) && !segClear(nav, c, nc, repX[c], repZ[c], repX[nc], repZ[nc])) continue;
       if (d & 1) {
         // 대각선: 양옆 칸이 둘 다 막혔으면(지형·물) 건너지 않음
@@ -342,23 +355,44 @@ export function lineWalkable(nav: Nav, ax: number, az: number, bx: number, bz: n
   const tdx = adx > 1e-9 ? CELL / adx : Infinity, tdz = adz > 1e-9 ? CELL / adz : Infinity;
   let tmx = adx > 1e-9 ? (si > 0 ? (i + 1) * CELL - ax : ax - i * CELL) / adx : Infinity;
   let tmz = adz > 1e-9 ? (sj > 0 ? (j + 1) * CELL - az : az - j * CELL) / adz : Infinity;
-  const { flags, base, vblock } = nav;
-  let prev = base[i + j * n];
-  const maxStep = veh ? V_MAX_STEP : MAX_STEP_ORTH;
+  const { flags, vblock } = nav;
+  let prev = i + j * n;
   for (let steps = 0; steps < 600; steps++) {
     const c = i + j * n;
     if (steps > 0) {
       if (veh) { if (vblock[c]) return false; }
       else if (flags[c] & F_BLOCK) return false;
-      if (Math.abs(base[c] - prev) > maxStep) return false;
+      if (!stepOK(nav, prev, c, false, veh)) return false;
     }
-    prev = base[c];
+    prev = c;
     if (!veh && (flags[c] & F_DIRTY) && !segVsList(nav, nav.cellBoxes.get(c), ax, az, bx, bz)) return false;
     if (i === ti && j === tj) return true;
     if (tmx < tmz) { tmx += tdx; i += si; } else { tmz += tdz; j += sj; }
     if (i < 0 || j < 0 || i >= n || j >= n) return false;
   }
   return false;
+}
+
+const hyp2 = Math.hypot;
+
+/** 위치 (x, z) 에서 곧장 걸어 닿는 칸: 벽이 가르는 칸이면 이웃 중 실제로 닿는 것 */
+export function anchorCell(nav: Nav, x: number, z: number, veh: boolean, r: number): number {
+  const c0 = cellOf(nav, x, z);
+  if (veh) return nearestOpen(nav, c0, r, true);
+  if (isOpen(nav, c0, false) && (!(nav.flags[c0] & F_DIRTY) || lineWalkable(nav, x, z, nav.repX[c0], nav.repZ[c0]))) return c0;
+  const n = nav.n, ci = c0 % n, cj = (c0 / n) | 0;
+  let best = -1, bd = Infinity;
+  for (let dj = -2; dj <= 2; dj++) for (let di = -2; di <= 2; di++) {
+    const i = ci + di, j = cj + dj;
+    if ((di === 0 && dj === 0) || i < 0 || j < 0 || i >= n || j >= n) continue;
+    const c = i + j * n;
+    if (!isOpen(nav, c, false)) continue;
+    const d = (nav.repX[c] - x) ** 2 + (nav.repZ[c] - z) ** 2;
+    if (d >= bd) continue;
+    if (!lineWalkable(nav, x, z, nav.repX[c], nav.repZ[c])) continue;
+    bd = d; best = c;
+  }
+  return best >= 0 ? best : nearestOpen(nav, c0, r, false);
 }
 
 /** 가장 가까운 열린 칸 (r 칸 안), 없으면 -1 */
@@ -414,12 +448,12 @@ function heapPop(nav: Nav, size: number): number {
  */
 export function findPath(nav: Nav, sx: number, sz: number, tx: number, tz: number, veh: boolean, maxExp = 4000): PathResult | null {
   const n = nav.n;
-  let s = nearestOpen(nav, cellOf(nav, sx, sz), 4, veh);
-  let t = nearestOpen(nav, cellOf(nav, tx, tz), 8, veh);
+  const s = anchorCell(nav, sx, sz, veh, 4);
+  const t = anchorCell(nav, tx, tz, veh, 8);
   if (s < 0 || t < 0) return { pts: [tx, tz], partial: true };
   const ptX = (c: number): number => veh ? (c % n + 0.5) * CELL : nav.repX[c];
   const ptZ = (c: number): number => veh ? (((c / n) | 0) + 0.5) * CELL : nav.repZ[c];
-  const goalExact = cellOf(nav, tx, tz) === t;
+  const goalExact = hyp2(tx - ptX(t), tz - ptZ(t)) < 3 && (veh || lineWalkable(nav, ptX(t), ptZ(t), tx, tz, false));
   const gx = goalExact ? tx : ptX(t), gz = goalExact ? tz : ptZ(t);
   if (s === t) return { pts: [gx, gz], partial: !goalExact };
   const dd = Math.hypot(gx - sx, gz - sz);
@@ -428,7 +462,7 @@ export function findPath(nav: Nav, sx: number, sz: number, tx: number, tz: numbe
 
   let sid = ++nav.searchId;
   if (sid >= 0xfffffff0) { nav.seen.fill(0); nav.closed.fill(0); nav.searchId = sid = 1; }
-  const { gS, par, seen, closed, edges, flags, vblock, base } = nav;
+  const { gS, par, seen, closed, edges, flags, vblock } = nav;
   const ti = t % n, tj = (t / n) | 0;
   const H = (c: number): number => {
     const di = Math.abs(c % n - ti), dj = Math.abs(((c / n) | 0) - tj);
@@ -456,7 +490,7 @@ export function findPath(nav: Nav, sx: number, sz: number, tx: number, tz: numbe
         nc = ni + nj * n;
         if (vblock[nc]) continue;
         if (d & 1) { if (vblock[ni + cj * n] || vblock[ci + nj * n]) continue; }
-        if (Math.abs(base[nc] - base[c]) > ((d & 1) ? V_MAX_STEP * 1.4 : V_MAX_STEP)) continue;
+        if (!stepOK(nav, c, nc, (d & 1) === 1, true)) continue;
       } else {
         if (!(edges[c] & (1 << d))) continue;
         nc = ci + DX[d] + (cj + DZ[d]) * n;
@@ -479,7 +513,7 @@ export function findPath(nav: Nav, sx: number, sz: number, tx: number, tz: numbe
   cells.reverse();
   // 원래 점들 (출발점 + 칸 대표점 + 목표점)
   const raw: number[] = [sx, sz];
-  for (let k = 1; k < cells.length; k++) raw.push(ptX(cells[k]), ptZ(cells[k]));
+  for (let k = 0; k < cells.length; k++) raw.push(ptX(cells[k]), ptZ(cells[k]));
   if (found && goalExact) { raw.push(tx, tz); }
   return { pts: pull(nav, raw, veh), partial: !(found && goalExact) };
 }
