@@ -9,6 +9,7 @@ import { IC } from './menu-icons';
 const THEME: Record<string, string> = { snow: '설원', tundra: '툰드라', industrial: '산업 지대' };
 const TIME: Record<string, string> = { day: '주간', dusk: '해 질 녘', overcast: '흐림' };
 const WATER: Record<string, string> = { none: '내륙', coast: '해안', river: '강' };
+const SIDE_NOTE: Record<string, string> = { us: '추코트카 해안에 교두보를 세우려는 원정군', ru: '항구와 강, 정유 시설을 지키는 방어군' };
 
 export function mountPlay(ctx: AppCtx, start: () => void): () => void {
   const p = ctx.profile;
@@ -86,7 +87,7 @@ export function mountPlay(ctx: AppCtx, start: () => void): () => void {
             const f = FACTIONS[id];
             return `<button class="wm-opt wm-side-opt" data-a="side" data-v="${id}" aria-pressed="${id === p.side}" style="--fc:${esc(f.css)}">
               <span class="wm-fac-mark">${esc(f.short)}</span>
-              <span class="wm-fac-b"><span class="wm-opt-name">${esc(f.name)}</span><span class="wm-opt-desc">${esc(f.army)}</span></span>
+              <span class="wm-fac-b"><span class="wm-opt-name">${esc(f.name)}</span><span class="wm-opt-desc">${esc(f.army && f.army !== f.name ? f.army : SIDE_NOTE[id] ?? '')}</span></span>
               <span class="wm-sel">${IC.check}</span>
             </button>`;
           }).join('')}

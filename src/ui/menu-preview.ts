@@ -36,7 +36,7 @@ export class Studio {
   /** 그릴 때마다 (슬롯 선 갱신용) */
   onFrame: (() => void) | null = null;
 
-  constructor(private canvas: HTMLCanvasElement, private quality: Quality) {
+  constructor(private canvas: HTMLCanvasElement, quality: Quality) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: quality !== 'low', alpha: false, powerPreference: 'default' });
     const r = this.renderer;
     r.setPixelRatio(Math.min(window.devicePixelRatio || 1, quality === 'high' ? 2 : quality === 'medium' ? 1.5 : 1));

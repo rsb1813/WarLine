@@ -88,14 +88,21 @@ export class Snow {
     this.points = new THREE.Points(this.geo, this.mat);
     this.points.frustumCulled = false;
     this.points.renderOrder = 13;
+    const v2 = new THREE.Vector2();
+    // 점 크기: 실제 그리는 버퍼 높이와 그 카메라 시야각으로
+    this.points.onBeforeRender = (renderer, _scene, camera) => {
+      const pc = camera as THREE.PerspectiveCamera;
+      if (!pc.isPerspectiveCamera) return;
+      renderer.getDrawingBufferSize(v2);
+      this.mat.uniforms.uScale.value = (v2.y * pc.zoom) / (2 * Math.tan((pc.fov * Math.PI) / 360));
+    };
   }
 
-  update(time: number, cam: THREE.Vector3, windX: number, windZ: number, pxPerUnit: number, light: THREE.Color): void {
+  update(time: number, cam: THREE.Vector3, windX: number, windZ: number, light: THREE.Color): void {
     const u = this.mat.uniforms;
     u.uTime.value = time % 3000;
     (u.uCam.value as THREE.Vector3).copy(cam);
     (u.uWind.value as THREE.Vector3).set(windX, 0, windZ);
-    u.uScale.value = pxPerUnit;
     (u.uColor.value as THREE.Color).setRGB(0.92 * light.r, 0.95 * light.g, 1.0 * light.b);
   }
 

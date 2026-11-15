@@ -1,5 +1,25 @@
 // 병사·차량·소품 모델용 기하 도우미: 기본 도형을 이어 붙여 정점 색이 든 하나의 BufferGeometry 로 합친다.
 import * as THREE from 'three';
+import type { Quality } from '../types';
+
+/** 각 층(병사·차량·소품)이 프레임마다 받는 공통 정보 */
+export interface ActorCtx {
+  frustum: THREE.Frustum;
+  /** 카메라 월드 위치 */
+  cam: THREE.Vector3;
+  /** 누적 시간, 이번 프레임 간격(잘라 둔 값) */
+  t: number; dt: number;
+  quality: Quality;
+  frame: number;
+}
+
+const _sph = new THREE.Sphere();
+/** 구가 시야 절두체에 걸치나 */
+export function inView(ctx: ActorCtx, x: number, y: number, z: number, r: number): boolean {
+  _sph.center.set(x, y, z);
+  _sph.radius = r;
+  return ctx.frustum.intersectsSphere(_sph);
+}
 
 const _q = new THREE.Quaternion();
 const _e = new THREE.Euler();

@@ -197,11 +197,9 @@ export class Sky {
     const N = 220;
     const rows = [0, 0.4, 0.75, 1];
     const pos: number[] = [], col: number[] = [], idx: number[] = [];
-    const hz = new THREE.Color().setHex(p.horizon);
-    const rock = new THREE.Color().setHex(p.mountainRock), snow = new THREE.Color().setHex(p.mountainSnow);
     // 모두 sRGB 에서 섞는다
-    const toS = (c: THREE.Color) => [c.r, c.g, c.b].map((x) => THREE.ColorManagement.fromWorkingColorSpace(new THREE.Color(x, x, x), THREE.SRGBColorSpace).r);
-    const hzS = toS(hz), rockS = toS(rock), snowS = toS(snow);
+    const toS = (hex: number) => srgbVec(hex).toArray();
+    const hzS = toS(p.horizon), rockS = toS(p.mountainRock), snowS = toS(p.mountainSnow);
     const tmp = new THREE.Color();
     for (let L = 0; L < layers.length; L++) {
       const ly = layers[L];
@@ -260,7 +258,7 @@ export class Sky {
   follow(cam: THREE.Vector3): void {
     this.dome.position.copy(cam);
     if (this.mountains) {
-      this.mountains.position.set((cam.x - this.center.x) * 0.82, cam.y * 0.5, (cam.z - this.center.z) * 0.82);
+      this.mountains.position.set((cam.x - this.center.x) * 0.82, 0, (cam.z - this.center.z) * 0.82);
     }
   }
 

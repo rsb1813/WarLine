@@ -661,7 +661,7 @@ function driveGround(g: Game, v: Vehicle, def: VehicleDef, st: VState, driver: S
   if (Math.sign(target) === moveSign) target *= slopeMul;
   if (waterDepth(w, v.pos.x, v.pos.z) > 0.3) target *= 0.55;
   let rate: number;
-  if (Math.abs(thr) < 0.01) rate = def.accel * 0.45;                                     // 굴러가며 서서히
+  if (Math.abs(thr) < 0.01) rate = def.accel * (tracked ? 0.9 : 0.6);                    // 굴러가며 서서히 (궤도는 저항이 커서 빨리 선다)
   else if (v.speed * target < 0 || Math.abs(target) < Math.abs(v.speed)) rate = def.accel * 2.2; // 제동
   else rate = def.accel;
   if (steep) rate = Math.max(rate, def.accel * 2.5);
@@ -807,7 +807,7 @@ function updateWreck(g: Game, v: Vehicle, def: VehicleDef, st: VState, dt: numbe
     st.wasAlive = false;
     v.wreckT = 0;
     if (!(v.respawnT > 0)) v.respawnT = def.respawn;
-    v.speed = 0; v.counterT = 0; v.lockWarn = 0; v.burning = false;
+    v.speed = 0; v.counterT = 0; v.lockWarn = 0; // burning 은 sim-core 가 잔해 불길로 켜 둔다
     st.landed = false;
   }
   validateSeats(g, v);
@@ -962,7 +962,7 @@ function fireSeat(g: Game, v: Vehicle, def: VehicleDef, st: VState, i: number, s
       kind = 'shell'; gravity = 0.4; life = clamp(1500 / vel, 2, 8); tracer = true; ammoKind = 'ap';
       break;
     case 'autocannon':
-      kind = 'shell'; radius = wd.radius > 0 ? Math.min(wd.radius, 1.5) : 1.5; gravity = 0.4; life = clamp(1200 / vel, 1.5, 6); tracer = true; ammoKind = 'ap';
+      kind = 'shell'; radius = wd.radius > 0 ? wd.radius : 1.5; gravity = 0.4; life = clamp(1200 / vel, 1.5, 6); tracer = true; ammoKind = 'ap';
       break;
     case 'mg':
       kind = 'bullet'; radius = 0; gravity = 1; life = clamp(1000 / vel, 1, 3);
@@ -1104,7 +1104,7 @@ function vehicleTimers(g: Game, v: Vehicle, def: VehicleDef, st: VState, dt: num
   v.counterCd = Math.max(0, v.counterCd - dt);
   v.counterT = Math.max(0, v.counterT - dt);
   v.lockWarn = Math.max(0, v.lockWarn - dt * 1.2);
-  v.spotT = Math.max(0, v.spotT - dt);
+  // (v.spotT 감소는 game.ts 가 한다)
   // 공병 운전수: 6초 동안 안 맞으면 60%까지 스스로 고침
   const driver = occupantOf(g, v, 0);
   const repairing = !!driver && driver.cls === 'engineer' && g.time - st.hurtAt >= 6 && v.hp < v.maxHp * 0.6;

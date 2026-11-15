@@ -71,18 +71,18 @@ export function statRows(base: WeaponStats, next: WeaponStats | null): string {
   return DETAIL_ROWS.map((row) => {
     const b = fillOf(row, base);
     const tb = row.fmt(base);
-    if (!next) return rowHtml(row.label, tb, '', b, 0, '');
+    if (!next) return barRow(row.label, tb, '', b, 0, '');
     const nn = fillOf(row, next);
     const tn = row.fmt(next);
     const dv = row.v(next) - row.v(base);
     const same = tn === tb && Math.abs(nn - b) < 0.004;
-    if (same) return rowHtml(row.label, tb, '', b, 0, '');
+    if (same) return barRow(row.label, tb, '', b, 0, '');
     const dir = dv > 0 ? 'up' : 'dn';
-    return rowHtml(row.label, tb, tn, Math.min(b, nn), Math.abs(nn - b), dir);
+    return barRow(row.label, tb, tn, Math.min(b, nn), Math.abs(nn - b), dir);
   }).join('');
 }
 
-function rowHtml(label: string, tb: string, tn: string, base: number, delta: number, dir: string): string {
+export function barRow(label: string, tb: string, tn: string, base: number, delta: number, dir: string): string {
   return `<div class="wlo-st${dir ? ' ' + dir : ''}">
     <span class="wlo-st-l">${label}</span>
     <span class="wlo-st-v">${tn ? `<s>${esc(tb)}</s><b>${esc(tn)}</b>` : `<b>${esc(tb)}</b>`}</span>

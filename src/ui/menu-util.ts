@@ -34,35 +34,26 @@ export function onAct(el: HTMLElement, fn: (a: string, t: HTMLElement, e: MouseE
 
 export interface RankInfo { rank: number; frac: number; inRank: number; span: number; toNext: number; title: string }
 
-/**
- * rankOf 가 돌려주는 cur/next 가 '계급 안 진행량/필요량' 이든 '시작/다음 기준 누적값' 이든 맞게 읽는다.
- * xp 를 1 늘렸을 때 cur 가 따라 움직이면 진행량 방식이다.
- */
+/** rankOf: cur = 이번 계급 안에서 쌓은 경험치, next = 다음 계급까지 필요한 양 (최고 계급이면 cur = next) */
 export function rankInfo(xp: number): RankInfo {
-  xp = Math.max(0, Math.floor(xp));
-  const r = rankOf(xp);
-  let rel = true;
-  const up = rankOf(xp + 1);
-  if (up.rank === r.rank) rel = up.cur !== r.cur;
-  else if (xp > 0) {
-    const dn = rankOf(xp - 1);
-    if (dn.rank === r.rank) rel = dn.cur !== r.cur;
-  }
-  const span = Math.max(1, rel ? r.next : r.next - r.cur);
-  const inRank = Math.max(0, rel ? r.cur : xp - r.cur);
+  const r = rankOf(Math.max(0, Math.floor(xp || 0)));
+  const span = Math.max(1, r.next);
+  const inRank = Math.max(0, Math.min(span, r.cur));
   return { rank: r.rank, frac: clamp01(inRank / span), inRank, span, toNext: Math.max(0, span - inRank), title: rankTitle(r.rank) };
 }
 
 const TITLES = ['이병', '일병', '상병', '병장', '하사', '중사', '상사', '원사', '준위', '소위', '중위', '대위', '소령', '중령', '대령', '준장', '소장', '중장', '대장', '원수'];
+/** 계급 1..99 → 칭호 20단계 × 호봉 5단계 */
+export const rankTier = (rank: number): number => Math.min(TITLES.length, Math.floor((Math.max(1, Math.floor(rank)) - 1) / 5) + 1);
+export const rankStep = (rank: number): number => ((Math.max(1, Math.floor(rank)) - 1) % 5) + 1;
 export function rankTitle(rank: number): string {
-  const i = Math.max(1, Math.floor(rank)) - 1;
-  if (i < TITLES.length) return TITLES[i];
-  return `원수 ${i - TITLES.length + 2}호봉`;
+  return `${TITLES[rankTier(rank) - 1]} ${rankStep(rank)}호봉`;
 }
 
 /** 계급장 SVG (직접 그린 문양: 갈매기, 마름모, 꽃, 별) */
 export function rankBadge(rank: number, cls = 'wm-badge'): string {
-  const n = Math.max(1, Math.floor(rank));
+  const n = rankTier(rank);
+  const step = rankStep(rank);
   const parts: string[] = [];
   const chev = (y: number) => `<path d="M17 ${y + 7}L32 ${y}L47 ${y + 7}" />`;
   const diamond = (x: number, y: number, s: number) => `<path class="f" d="M${x} ${y - s}L${x + s * 0.72} ${y}L${x} ${y + s}L${x - s * 0.72} ${y}Z" />`;
@@ -109,7 +100,8 @@ export function rankBadge(rank: number, cls = 'wm-badge'): string {
       parts.push(star(32 + Math.cos(a) * 11, 32 + Math.sin(a) * 11, 4.6));
     }
   }
-  return `<svg class="${cls}" viewBox="0 0 64 64" aria-hidden="true"><path class="fr" d="M32 3L57 17V47L32 61L7 47V17Z" /><path class="fr2" d="M32 8L52 19.5V44.5L32 56L12 44.5V19.5Z" /><g class="ins">${parts.join('')}</g></svg>`;
+  const pips = Array.from({ length: step }, (_, k) => `<circle class="pip" cx="${(32 - (step - 1) * 3.5 + k * 7).toFixed(1)}" cy="51" r="1.7" />`).join('');
+  return `<svg class="${cls}" viewBox="0 0 64 64" aria-hidden="true"><path class="fr" d="M32 3L57 17V47L32 61L7 47V17Z" /><path class="fr2" d="M32 8L52 19.5V44.5L32 56L12 44.5V19.5Z" /><g class="ins" transform="translate(0 -3)">${parts.join('')}</g>${pips}</svg>`;
 }
 
 // ───────── 앱 공용 문맥 ─────────

@@ -168,16 +168,17 @@ export class Hud {
       const name = el('span', 'cap-name', nm, '');
       const status = el('span', 'cap-status', nm, '');
       const cnt = el('div', 'cap-cnt', head);
-      const nf = el('span', 'cap-nf', cnt, '0');
-      iconEl(ICON.person, 'ci', nf);
-      const ne = el('span', 'cap-ne', cnt, '0');
-      iconEl(ICON.person, 'ci', ne);
+      const nfw = el('span', 'cap-nf', cnt);
+      iconEl(ICON.person, 'ci', nfw);
+      const nf = el('b', '', nfw, '0');
+      const new_ = el('span', 'cap-ne', cnt);
+      iconEl(ICON.person, 'ci', new_);
+      const ne = el('b', '', new_, '0');
       const barRow = el('div', 'cap-barrow', root);
       const bar = el('div', 'cap-bar', barRow);
       const fill = el('i', '', bar);
       const pct = el('span', 'cap-pct', barRow, '0%');
-      this.cap = { root, letter, name, status, fill, pct, nf: nf.firstChild as HTMLElement, ne: ne.firstChild as HTMLElement };
-      // firstChild 는 글자 노드: setText 는 Node 도 받는다
+      this.cap = { root, letter, name, status, fill, pct, nf, ne };
       setShow(root, false);
     }
     // 상호작용 안내
@@ -211,7 +212,7 @@ export class Hud {
       const sub = el('div', 'dn-sub', root, '의무병을 기다리는 중');
       const medic = el('div', 'dn-medic', root, '');
       const btn = el('button', 'dn-give', root, '포기하고 재배치');
-      (btn as HTMLButtonElement).type = 'button';
+      btn.type = 'button';
       this.guard(btn);
       btn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); this.onGiveUp(); });
       const hint = el('div', 'dn-hint', root, '스페이스를 길게 눌러 포기');

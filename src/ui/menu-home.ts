@@ -35,7 +35,7 @@ export function mountHome(ctx: AppCtx): () => void {
       <section class="wm-hero">
         <p class="wm-eyebrow wm-rise" style="--d:0"><i></i>2147 · 베링 해협</p>
         <h1 class="wm-word" aria-label="${word}">${[...word].map((c, i) => `<span style="--i:${i}">${c}</span>`).join('')}</h1>
-        <p class="wm-tag wm-rise" style="--d:2">대규모 제병협동 정복전 · 미 북극사령부 대 러시아 극동군</p>
+        <p class="wm-tag wm-rise" style="--d:2">대규모 제병협동 정복전 · ${esc(FACTIONS.us?.name ?? '')} 대 ${esc(FACTIONS.ru?.name ?? '')}</p>
         <p class="wm-lore wm-rise" style="--d:3">${esc(LORE)}</p>
         <nav class="wm-nav wm-rise" style="--d:4">
           <button class="wm-deploy" data-a="battle">
@@ -58,7 +58,7 @@ export function mountHome(ctx: AppCtx): () => void {
             <p class="wm-k">계급 ${ri.rank}</p>
             <p class="wm-rank-t">${esc(ri.title)}</p>
             <div class="wm-xp"><i style="width:${(ri.frac * 100).toFixed(1)}%"></i></div>
-            <p class="wm-xp-t"><span>${fmtInt(ri.inRank)} / ${fmtInt(ri.span)} XP</span><span>다음 계급까지 ${fmtInt(ri.toNext)}</span></p>
+            <p class="wm-xp-t"><span>${fmtInt(ri.inRank)} / ${fmtInt(ri.span)} XP</span><span>${ri.toNext > 0 ? `다음 계급까지 ${fmtInt(ri.toNext)}` : '최고 계급'}</span></p>
           </div>
         </div>
         <dl class="wm-quick">
