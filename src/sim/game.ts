@@ -1,6 +1,6 @@
 // sim-core: 판 만들기, 고정 스텝 진행, 배치·출현 지점, 점령·티켓·종료
 import type {
-  ClassId, Controls, Flag, GadgetPick, Game, GameOpts, Loadout, Placed, Side, Soldier, SpawnOption, Team, Vec3, Vehicle, WeaponPick,
+  Box, ClassId, Controls, Flag, FlagSite, GadgetPick, Game, GameOpts, Loadout, Placed, Side, Soldier, SpawnOption, Team, Vec3, Vehicle, WeaponPick,
 } from '../types';
 import { CLASSES, NAMES, PRIMARY_IDS, SIZES, VEHICLES, WEAPONS, defaultAttachments } from '../defs';
 import { defaultLoadout } from '../profile';
@@ -136,7 +136,7 @@ export function createGame(o: GameOpts): Game {
     seed: seed || 1, nextId: 1,
   };
 
-  g.flags = world.flags.map((f): Flag => ({
+  g.flags = world.flags.map((f: FlagSite): Flag => ({
     id: f.id, name: f.name, pos: { x: f.x, y: heightAt(world, f.x, f.z), z: f.z }, r: f.r,
     owner: -1, prog: 0, n: [0, 0], contested: false,
   }));
@@ -539,7 +539,7 @@ function freeAt(g: Game, x: number, z: number, probeY: number, self: number): nu
   const r = BODY.radius + 0.05;
   const top = y + BODY.height.stand;
   const hit = { b: false };
-  boxesNear(w, x, z, r + 0.5, (b) => {
+  boxesNear(w, x, z, r + 0.5, (b: Box) => {
     if (hit.b || !b.alive || !b.solid) return;
     if (b.max.y <= y + 0.45 || b.min.y >= top) return;
     if (x + r < b.min.x || x - r > b.max.x || z + r < b.min.z || z - r > b.max.z) return;
