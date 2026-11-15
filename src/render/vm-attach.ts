@@ -1,6 +1,6 @@
 // render-viewmodel: barrel, muzzle devices, sights/optics and underbarrel attachments.
 import * as THREE from 'three';
-import { GunCtx, handAnchor, has } from './vm-gunparts';
+import { GunCtx, has } from './vm-gunparts';
 import { rrect, circlePts, shellZ, hollowZ, planeGeo, circleGeo, torusGeo } from './vm-geo';
 import { barrelMods, supportHand } from './vm-bodies';
 import * as M from './vm-mats';
@@ -266,10 +266,8 @@ export function buildOptic(c: GunCtx): void {
     const knurl = (x: number, y: number, z: number, axis: 'y' | 'x', R: number, h: number) => {
       for (let i = 0; i < 14; i++) {
         const an = i * Math.PI * 2 / 14;
-        const bx = axis === 'y'
-          ? k.box(og, 0.0016, h * 0.8, 0.0016, m.dark, x + Math.cos(an) * R, y, z + Math.sin(an) * R)
-          : k.box(og, h * 0.8, 0.0016, 0.0016, m.dark, x, y + Math.cos(an) * R, z + Math.sin(an) * R);
-        void bx;
+        if (axis === 'y') k.box(og, 0.0016, h * 0.8, 0.0016, m.dark, x + Math.cos(an) * R, y, z + Math.sin(an) * R);
+        else k.box(og, h * 0.8, 0.0016, 0.0016, m.dark, x, y + Math.cos(an) * R, z + Math.sin(an) * R);
       }
     };
     k.tubeY(og, 0.0122, 0.0122, 0.02, housing, 0, ty + 0.017 + 0.01, oz, 20);
@@ -462,4 +460,3 @@ function addLaser(c: GunCtx, P: THREE.Object3D, x: number, y: number, z: number)
   const o = new THREE.Object3D(); o.name = 'laser'; o.position.set(x, y, z); P.add(o); c.ud.laser = o;
 }
 
-export { handAnchor };

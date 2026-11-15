@@ -642,7 +642,13 @@ export function openEditor(host: HTMLElement, profile: Profile, cls: ClassId, on
   const onClick = (e: MouseEvent) => {
     const t = (e.target as HTMLElement).closest('[data-a]') as HTMLElement | null;
     if (!t || !el.contains(t) || (t as HTMLButtonElement).disabled) return;
-    act(t.dataset.a ?? '', t.dataset.v ?? '');
+    const a = t.dataset.a ?? '', v = t.dataset.v ?? '';
+    act(a, v);
+    // 키보드로 눌렀으면 다시 그린 뒤에도 같은 버튼에 초점을 둔다
+    if (e.detail === 0 && !closed) {
+      const again = [...el.querySelectorAll<HTMLElement>(`[data-a="${a}"]`)].find((x) => (x.dataset.v ?? '') === v && x.offsetParent !== null);
+      again?.focus({ preventScroll: true });
+    }
   };
   el.addEventListener('click', onClick);
 

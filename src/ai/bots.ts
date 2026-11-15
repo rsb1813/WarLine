@@ -295,3 +295,138 @@ function flagCover(g: Game, st: AIState, fi: number): number[] {
   }
   return e.pts;
 }
+
+// ───────────────────────── 인지 ─────────────────────────
+
+const candId: number[] = [];
+const candD: number[] = [];
+const T1 = tmpV(), T2 = tmpV();
+
+function occupantTeam(g: Game, v: Vehicle): number {
+  for (let i = 0; i < v.seats.length; i++) { const id = v.seats[i]; if (id >= 0 && g.soldiers[id]) return g.soldiers[id].team; }
+  return -1;
+}
+function hostileVehicle(g: Game, s: Soldier, v: Vehicle): boolean {
+  if (!v.alive) return false;
+  const t = occupantTeam(g, v);
+  return t >= 0 && t !== s.team;
+}
+function viewOrigin(g: Game, s: Soldier): Vec3 {
+  if (s.vehicle >= 0) {
+    const v = g.vehicles[s.vehicle];
+    if (v) { const p = seatWorldPos(v, s.seat); p.y += 0.25; return p; }
+  }
+  return eyePos(s);
+}
+const canSee = (g: Game, a: Vec3, b: Vec3): boolean => lineOfSight(g.world, a, b) && !smokeBlocks(g, a, b);
+
+/** 적 병사의 겨눌 점 (차량 노출 좌석이면 좌석 위치) */
+function targetPoint(g: Game, o: Soldier, head: boolean, out: Vec3): Vec3 {
+  if (o.vehicle >= 0) {
+    const v = g.vehicles[o.vehicle];
+    if (v) { const p = seatWorldPos(v, o.seat); out.x = p.x; out.y = p.y + (head ? 0.55 : 0.25); out.z = p.z; return out; }
+  }
+  if (head) { const h = headCenter(o); out.x = h.x; out.y = h.y; out.z = h.z; return out; }
+  return chestOf(o, out);
+}
+
+function perceive(g: Game, s: Soldier, m: Mind): void {
+  const eye = viewOrigin(g, s);
+  const hurt = g.time - s.lastHurtT < 2.5;
+  const blind = s.blindT > 0.3;
+  const inVeh = s.vehicle >= 0;
+  const fy = inVeh ? s.ctl.yaw : s.yaw;
+  const fx = -Math.sin(fy), fz = -Math.cos(fy);
+  const fovCos = inVeh ? -2 : 0.5; // 차량 승무원은 사방을 본다 (잠망경)
+  const maxD = inVeh ? 260 : 180;
+  candId.length = 0; candD.length = 0;
+  let known = -1, knownD = 70;
+  const ss = g.soldiers;
+  for (let i = 0; i < ss.length; i++) {
+    const o = ss[i];
+    if (o.team === s.team || o.state !== 'alive') continue;
+    if (o.vehicle >= 0) {
+      const v = g.vehicles[o.vehicle], def = v ? vehDef(v) : undefined;
+      if (!v || !def || !def.seats[o.seat] || !def.seats[o.seat].exposed) continue;
+    }
+    const dx = o.pos.x - eye.x, dz = o.pos.z - eye.z, d2 = dx * dx + dz * dz;
+    if (d2 > maxD * maxD) continue;
+    const d = Math.sqrt(d2);
+    if (o.spotT > 0 && d < knownD) { knownD = d; known = o.id; }
+    if (blind && d > 5) continue;
+    if (!(d < 12 || hurt || o.id === m.tgt || dx * fx + dz * fz > fovCos * d)) continue;
+    // 가까운 순으로 8개까지
+    let k = candD.length;
+    if (k >= 8 && d >= candD[7]) continue;
+    if (k < 8) { candD.push(d); candId.push(o.id); } else k = 7;
+    while (k > 0 && candD[k - 1] > d) { candD[k] = candD[k - 1]; candId[k] = candId[k - 1]; k--; }
+    candD[k] = d; candId[k] = o.id;
+  }
+  let best = -1, bestS = Infinity, bestD = 0, nVis = 0, rays = 0, headOnly = false;
+  for (let k = 0; k < candId.length && rays < 6; k++) {
+    const o = ss[candId[k]], d = candD[k];
+    rays++;
+    const c = targetPoint(g, o, false, T1);
+    let vis = lineOfSight(g.world, eye, c), ho = false;
+    if (!vis) { const h = targetPoint(g, o, true, T2); vis = lineOfSight(g.world, eye, h); ho = vis; }
+    if (vis && smokeBlocks(g, eye, c)) vis = false;
+    if (!vis) continue;
+    nVis++;
+    let sc = d;
+    if (o.id === s.lastHurtBy && hurt) sc -= 40;
+    if (o.id === m.tgt) sc -= 15;
+    if (o.ctl.fire && Math.abs(angleDiff(o.yaw, yawTo(o.pos, s.pos))) < 0.2) sc -= 10;
+    if (o.state === 'alive' && o.isPlayer) sc += 2; // 사람을 특별히 노리지 않는다
+    if (sc < bestS) { bestS = sc; best = o.id; bestD = d; headOnly = ho; }
+  }
+  // 차량
+  m.visV = -1; m.visVD = 1e9;
+  const vmax = 300;
+  for (const v of g.vehicles) {
+    if (!hostileVehicle(g, s, v)) continue;
+    const dx = v.pos.x - eye.x, dz = v.pos.z - eye.z, d = hyp(dx, dz);
+    if (d > vmax || d > m.visVD) continue;
+    const def = vehDef(v);
+    if (!(d < 25 || hurt || inVeh || (def && def.air) || dx * fx + dz * fz > fovCos * d)) continue;
+    T1.x = v.pos.x; T1.y = v.pos.y + (def ? def.size.y * 0.55 : 1.5); T1.z = v.pos.z;
+    if (!canSee(g, eye, T1)) continue;
+    m.visV = v.id; m.visVD = d;
+  }
+  // 표적 갱신
+  const df = DIFFS[g.opts.diff] ?? DIFFS.normal;
+  if (best >= 0) {
+    const o = ss[best];
+    if (best !== m.tgt || g.time - m.seenT > 2.5) {
+      m.acqT = g.time;
+      m.reactT = g.time + df.react * (0.75 + 0.6 * rnd(g)) + (bestD > 80 ? 0.15 : 0) + (s.blindT > 0 ? 0.4 : 0);
+      const big = df.aimErr * DEG * 2.2;
+      m.errY = m.errTY = gauss(g) * big; m.errP = m.errTP = gauss(g) * big * 0.5;
+    }
+    m.tgt = best; m.vis = true; m.seenT = g.time;
+    targetPoint(g, o, headOnly, m.lk);
+    m.threatYaw = yawTo(s.pos, o.pos);
+    // 오차: 같은 표적을 오래 볼수록 줄어든다, 움직이면 늘어난다
+    const on = g.time - m.acqT;
+    const shrink = clamp(1.7 - on * 0.42, g.opts.diff === 'hard' ? 0.35 : 0.5, 1.7);
+    const ts = hyp(o.vel.x, o.vel.z), ms = hyp(s.vel.x, s.vel.z);
+    const moveK = 1 + Math.min(0.6, ts / 10) + (ms > 1.5 ? 0.35 : 0) + (s.blindT > 0 ? 1 : 0);
+    const sig = df.aimErr * DEG * shrink * moveK;
+    m.errTY = gauss(g) * sig; m.errTP = gauss(g) * sig * 0.55;
+    // 주변 무리
+    let cl = 0;
+    for (let k = 0; k < candId.length; k++) {
+      const q = ss[candId[k]];
+      if (q !== o && (q.pos.x - o.pos.x) ** 2 + (q.pos.z - o.pos.z) ** 2 < 36) cl++;
+    }
+    m.cluster = cl;
+  } else {
+    m.vis = false; m.cluster = 0;
+    if (m.tgt >= 0) {
+      const o = ss[m.tgt];
+      if (!o || o.state !== 'alive' || g.time - m.seenT > 6) m.tgt = -1;
+    }
+  }
+  m.nVis = nVis;
+  m.known = known;
+  if (hurt && !m.vis) { m.threatYaw = s.lastHurtYaw; m.alertUntil = g.time + 2; }
+}

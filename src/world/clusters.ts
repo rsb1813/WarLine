@@ -181,12 +181,19 @@ function containerYard(G: Gen, cx: number, cz: number, rows: number, cols: numbe
 /** 부두: 바다 쪽(+x)으로 뻗는 상판 */
 function pier(G: Gen, f: FlagPlan): void {
   if (!G.shoreX || G.W < -1e8) return;
-  const pz = f.z + (G.r() < 0.5 ? -1 : 1) * rr(G, 8, 16);
-  let xs = -1;
-  for (let x = f.x; x < G.S - 40; x += 1) if (H(G, x, pz) < G.W + 0.3) { xs = x; break; }
-  if (xs < 0) return;
-  const x0 = xs - 5, len = 30, hw = 3;
-  occMark(G, x0, pz - hw - 1, x0 + len + 1, pz + hw + 1, 1);
+  const len = 30, hw = 3;
+  let pz = 0, x0 = -1;
+  for (let k = 0; k < 8 && x0 < 0; k++) {
+    const z = f.z + (k % 2 ? -1 : 1) * (6 + k * 3);
+    let xs = -1;
+    for (let x = f.x; x < G.S - 40; x += 1) if (H(G, x, z) < G.W + 0.3) { xs = x; break; }
+    if (xs < 0) continue;
+    // 상판과 뭍 쪽 접근로(12 m)가 비어 있어야
+    if (!occFree(G, xs - 17, z - hw - 1, xs - 5, z + hw + 1, true)) continue;
+    pz = z; x0 = xs - 5;
+  }
+  if (x0 < 0) return;
+  occMark(G, x0 - 12, pz - hw - 1, x0 + len + 1, pz + hw + 1, 1);
   G.later.push(() => {
     const w = G.w;
     const top = G.W + 1.4;
@@ -215,10 +222,10 @@ export function flagCluster(G: Gen, f: FlagPlan): void {
   const ind = G.def.theme === 'industrial';
   switch (f.kind) {
     case 'harbor': {
+      pier(G, f);
       placeMany(G, cx, cz, r0, r1, [['warehouse', '', 2], ['office', '', 1], ['shed', '', 2], ['house', '', 2]]);
       const [yx, yz] = aroundPoint(G, cx, cz, f.r + 6, f.r + 16);
       containerYard(G, yx, yz, 3, 3);
-      pier(G, f);
       break;
     }
     case 'bridge': {

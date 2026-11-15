@@ -32,6 +32,9 @@ export class FxCtx {
     readonly q: number,
   ) {}
 
+  /** 낮은 품질은 연기·먼지 뭉치를 덜 만들고 대신 조금 크게 */
+  get big(): number { return 1 + (1 - this.q) * 0.5; }
+
   later(delay: number, fn: () => void): void { this.queue.push({ t: this.time + delay, fn }); }
 
   runQueue(): void {
@@ -110,8 +113,8 @@ const C = {
   cone0: col(6, 4.2, 2.2), cone1: col(2.5, 1.1, 0.3),
   mglow0: col(1.6, 1.0, 0.45), mglow1: col(0.6, 0.25, 0.05),
   spark0: col(9, 6.5, 3.2), spark1: col(3, 0.8, 0.12),
-  fire0: col(3.4, 2.6, 1.8), fire1: col(1.15, 0.45, 0.14),
-  flame0: col(2.5, 1.55, 0.8), flame1: col(0.95, 0.32, 0.08),
+  fire0: col(2.3, 1.45, 0.7), fire1: col(1.0, 0.36, 0.08),
+  flame0: col(1.9, 1.05, 0.45), flame1: col(0.85, 0.26, 0.05),
   ember0: col(3.2, 1.2, 0.25), ember1: col(1.0, 0.12, 0.0),
   glowE0: col(2.6, 1.5, 0.6), glowE1: col(1.1, 0.3, 0.05),
   ring0: col(1.7, 1.4, 1.1), ring1: col(0.6, 0.4, 0.25),
@@ -197,6 +200,8 @@ export function tracer(fx: FxCtx, from: Vec3, d: Vec3, speed: number, c: Col, ma
 // ───────────────────────── 탄착 ─────────────────────────
 
 const UPV: Vec3 = { x: 0, y: 1, z: 0 };
+/** 불길의 가림 (가산 풀): 밝은 배경 앞에서도 주황으로 보이게 */
+const FIRE_OCC = 0.55;
 
 export function impact(fx: FxCtx, p: Vec3, nIn: Vec3, mat: string, big: boolean): void {
   const nl = Math.hypot(nIn.x, nIn.y, nIn.z);
@@ -415,23 +420,26 @@ export function explosion(fx: FxCtx, p: Vec3, r: number, kind: ExpKind): void {
     const s = vr * rr(2.2, 4.2);
     const i = P(fx.add, x + u.x * o, y + u.y * o + 0.2, z + u.z * o, u.x * s, u.y * s + vr * 0.6, u.z * s,
       rr(0.45, 0.8) * (kind === 'vehicle' ? 1.35 : 1), vr * rr(0.45, 0.7), vr * rr(1.1, 1.6), F.FIRE, C.fire0, C.fire1, 1, 3.5, -2.5, 0.3, 0, 0.35);
-    fx.add.nf[i] = F.FIRE_N;
+    fx.add.nf[i] = F.FIRE_N; fx.add.occ[i] = FIRE_OCC;
   }
 
   // 연기 기둥
-  const nS = cnt((6 + vr * 2.4) * def.smoke * qq) + 2;
-  const g = 0.22 + (0.045 - 0.22) * def.dark;
-  const smokeEnd = col(g, g * 0.96, g * 0.92);
-  const lit = mix(C.smokeLit, smokeEnd, 0.3);
+  const nS = Math.max(6, cnt((8 + vr * 2.6) * def.smoke * qq) + 2);
+  const g = 0.24 + (0.05 - 0.24) * def.dark;
+  const smokeEnd = col(g, g * 0.97, g * 0.94);
+  const lit = mix(C.smokeLit, smokeEnd, 0.6);
   const lifeK = 0.8 + vr * 0.06;
+  const bk = fx.big;
   for (let j = 0; j < nS; j++) {
-    const u = rndUp(0.2);
-    const o = vr * 0.5 * R();
-    const spread = j < nS * 0.3 ? 1.6 : 0.8;
-    const i = P(fx.alp, x + u.x * o, y + u.y * o * 0.6 + 0.3, z + u.z * o,
-      u.x * vr * spread * rr(0.5, 1.1), vr * rr(0.4, 2.2), u.z * vr * spread * rr(0.5, 1.1),
-      rr(6, 11) * lifeK, vr * rr(0.5, 0.8), vr * rr(2.0, 3.2), smokeF(), lit, smokeEnd, rr(0.55, 0.75), 0.9, -0.55, 1, 0.06, 0.4);
+    const u = rndUp(0.25);
+    const o = vr * 0.45 * R();
+    const low = j < nS * 0.35; // 낮게 옆으로 퍼지는 것 / 위로 솟는 기둥
+    const hs = low ? rr(0.7, 1.3) : rr(0.25, 0.6);
+    const i = P(fx.alp, x + u.x * o, y + u.y * o * 0.5 + 0.3, z + u.z * o,
+      u.x * vr * hs, vr * (low ? rr(0.2, 0.6) : rr(0.6, 1.8)), u.z * vr * hs,
+      rr(6, 11) * lifeK, vr * rr(0.6, 0.9) * bk, vr * rr(2.2, 3.4) * bk, smokeF(), lit, smokeEnd, rr(0.6, 0.8), 0.9, -0.5, 1, 0.05, 0.42);
     fx.alp.rv[i] = rr(-0.3, 0.3);
+    fx.alp.tint(i, rr(0.85, 1.1));
   }
 
   // 불씨
@@ -478,7 +486,7 @@ export function explosion(fx: FxCtx, p: Vec3, r: number, kind: ExpKind): void {
       const a = (j / Math.max(1, nD)) * 6.2832 + R() * 0.5;
       const cx = Math.cos(a), cz = Math.sin(a), s = vr * rr(2.8, 4.8);
       const i = P(fx.alp, x + cx * vr * 0.25, sy + rr(0.25, 0.7), z + cz * vr * 0.25, cx * s, rr(0.3, 1.2), cz * s,
-        rr(2.5, 5), vr * 0.35, vr * rr(1.1, 1.7), dustF(), dustC, dustC, rr(0.45, 0.6), 2.2, 0.12, 0.6, 0.03, 0.35);
+        rr(2.5, 5), vr * 0.35 * fx.big, vr * rr(1.1, 1.7) * fx.big, dustF(), dustC, dustC, rr(0.45, 0.6), 2.2, 0.12, 0.6, 0.03, 0.35);
       fx.alp.tint(i, rr(0.85, 1.1));
       fx.alp.slide(i, sy + 0.2);
     }
@@ -570,13 +578,13 @@ export function pop(fx: FxCtx, p: Vec3, vr: number): void {
     const u = rndUp(0.2);
     const s = vr * rr(2, 4);
     const i = P(fx.add, p.x, p.y, p.z, u.x * s, u.y * s + vr, u.z * s, rr(0.4, 0.7), vr * 0.5, vr * rr(1.1, 1.5), F.FIRE, C.fire0, C.fire1, 1, 3.5, -2, 0.3, 0, 0.35);
-    fx.add.nf[i] = F.FIRE_N;
+    fx.add.nf[i] = F.FIRE_N; fx.add.occ[i] = FIRE_OCC;
   }
   const gy = fx.world ? heightAt(fx.world, p.x, p.z) : p.y - 2;
   sparks(fx, p.x, p.y, p.z, null, cnt(10 * qq), vr * 7, 0.8, gy, 0.04);
   for (let j = 0; j < cnt(4 * qq) + 1; j++) {
     const u = rndUp(0.5);
-    P(fx.alp, p.x, p.y + 0.3, p.z, u.x * vr, vr * rr(1, 2), u.z * vr, rr(4, 7), vr * 0.6, vr * rr(2, 3), smokeF(), C.smokeLit, C.black, 0.6, 1, -0.5, 1, 0.06, 0.4);
+    P(fx.alp, p.x, p.y + 0.3, p.z, u.x * vr, vr * rr(1, 2), u.z * vr, rr(4, 7), vr * 0.6 * fx.big, vr * rr(2, 3) * fx.big, smokeF(), mix(C.smokeLit, C.black, 0.5), C.black, 0.6, 1, -0.5, 1, 0.06, 0.4);
   }
 }
 
@@ -593,12 +601,12 @@ export function vehicleBurst(fx: FxCtx, p: Vec3, size: Vec3): void {
   for (let j = 0; j < cnt(6 * qq) + 2; j++) {
     const i = P(fx.add, top.x + rr(-0.5, 0.5) * sc, top.y, top.z + rr(-0.5, 0.5) * sc, rr(-1, 1), rr(6, 12), rr(-1, 1),
       rr(0.6, 1.0), sc * 0.8, sc * rr(1.6, 2.2), F.FIRE, C.fire0, C.fire1, 1, 2.5, -1, 0.3, 0, 0.4);
-    fx.add.nf[i] = F.FIRE_N;
+    fx.add.nf[i] = F.FIRE_N; fx.add.occ[i] = FIRE_OCC;
   }
   for (let j = 0; j < cnt(10 * qq) + 2; j++) {
     const u = rndUp(0.6);
-    P(fx.alp, top.x + u.x * sc, top.y + 0.5, top.z + u.z * sc, u.x * 2, rr(3, 7), u.z * 2, rr(7, 11), sc * 1.0, sc * rr(3.5, 5),
-      smokeF(), C.smokeLit, C.black, rr(0.6, 0.8), 0.8, -0.5, 1.2, 0.05, 0.45);
+    P(fx.alp, top.x + u.x * sc, top.y + 0.5, top.z + u.z * sc, u.x * 2, rr(3, 7), u.z * 2, rr(7, 11), sc * fx.big, sc * rr(3.5, 5) * fx.big,
+      smokeF(), mix(C.smokeLit, C.black, 0.5), C.black, rr(0.6, 0.8), 0.8, -0.5, 1.2, 0.05, 0.45);
   }
   for (let j = 0; j < cnt(10 * qq) + 2; j++) {
     const u = rndUp(0.5);
@@ -754,7 +762,7 @@ export function collapse(fx: FxCtx, pos: Vec3, b: Building | undefined): void {
       for (let j = 0; j < n; j++) {
         const x = cx + (R() - 0.5) * W, z = cz + (R() - 0.5) * D, y = y0 + R() * H * (0.6 - wv * 0.15);
         const dx = x - cx, dz = z - cz, l = Math.hypot(dx, dz) || 1;
-        const i = P(fx.alp, x, y, z, dx / l * rr(1.5, 5), rr(0.3, 2.0), dz / l * rr(1.5, 5), rr(8, 15), rr(2.5, 4.5) * sz, rr(8, 13) * sz,
+        const i = P(fx.alp, x, y, z, dx / l * rr(1.5, 5), rr(0.3, 2.0), dz / l * rr(1.5, 5), rr(8, 15), rr(2.5, 4.5) * sz * fx.big, rr(8, 13) * sz * fx.big,
           R() < 0.5 ? dustF() : smokeF(), dustC, dustC, rr(0.55, 0.75), 0.55, 0.04, 0.5, 0.1, 0.5);
         fx.alp.tint(i, rr(0.85, 1.1)); fx.alp.rv[i] = rr(-0.15, 0.15); fx.alp.slide(i, y0 + 1);
       }
@@ -866,11 +874,11 @@ export function smokeWisp(fx: FxCtx, p: Vec3, R0: number, wx: number, wz: number
 export function vehicleFlame(fx: FxCtx, x: number, y: number, z: number, sc: number, k: number): void {
   const i = P(fx.add, x, y, z, rr(-0.3, 0.3), rr(1.2, 2.6) * sc, rr(-0.3, 0.3), rr(0.5, 0.95), sc * rr(0.6, 0.9), sc * rr(1.3, 1.9),
     F.FIRE + ((R() * 3) | 0), C.flame0, C.flame1, 0.9 * k, 1.2, -1.5, 0.5, 0.08, 0.4);
-  fx.add.nf[i] = F.FIRE_N - 3;
+  fx.add.nf[i] = F.FIRE_N - 3; fx.add.occ[i] = FIRE_OCC;
 }
 
 export function blackSmoke(fx: FxCtx, x: number, y: number, z: number, sc: number, a: number): void {
-  const i = P(fx.alp, x + rr(-0.3, 0.3), y, z + rr(-0.3, 0.3), rr(-0.4, 0.4), rr(1.8, 3.2), rr(-0.4, 0.4), rr(6, 10), sc * 0.9, sc * rr(3.5, 5.5),
+  const i = P(fx.alp, x + rr(-0.3, 0.3), y, z + rr(-0.3, 0.3), rr(-0.4, 0.4), rr(1.8, 3.2), rr(-0.4, 0.4), rr(6, 10), sc * 0.9 * fx.big, sc * rr(3.5, 5.5) * fx.big,
     smokeF(), C.black, C.black1, a * rr(0.75, 1), 0.45, -0.4, 1.3, 0.05, 0.45);
   fx.alp.rv[i] = rr(-0.25, 0.25);
 }
@@ -878,7 +886,7 @@ export function blackSmoke(fx: FxCtx, x: number, y: number, z: number, sc: numbe
 export function groundFlame(fx: FxCtx, x: number, y: number, z: number, s: number, k: number): void {
   const i = P(fx.add, x, y + 0.15 * s, z, rr(-0.2, 0.2), rr(0.8, 2) * s, rr(-0.2, 0.2), rr(0.45, 0.85), s * rr(0.4, 0.7), s * rr(0.9, 1.5),
     F.FIRE + ((R() * 3) | 0), C.flame0, C.flame1, 0.85 * k, 1.2, -2, 0.5, 0.1, 0.4);
-  fx.add.nf[i] = F.FIRE_N - 3;
+  fx.add.nf[i] = F.FIRE_N - 3; fx.add.occ[i] = FIRE_OCC;
 }
 
 export function fireSmoke(fx: FxCtx, x: number, y: number, z: number, s: number): void {
@@ -910,9 +918,9 @@ export function launchPuff(fx: FxCtx, p: Vec3, vel: Vec3): void {
 
 /** 날아가는 파편 꼬리: 1 연기, 2 불 + 연기 */
 export function debrisTrail(fx: FxCtx, x: number, y: number, z: number, kind: number): void {
-  P(fx.alp, x, y, z, 0, 0.3, 0, rr(1.2, 2.2), 0.15, rr(0.7, 1.2), smokeF(), C.black1, col(0.25, 0.24, 0.23), 0.4, 1, -0.2, 0.8, 0.05, 0.35);
+  P(fx.alp, x, y, z, rr(-0.2, 0.2), 0.3, rr(-0.2, 0.2), rr(1.4, 2.4), 0.4, rr(1.3, 2.0) * fx.big, smokeF(), C.black1, col(0.25, 0.24, 0.23), 0.38, 1, -0.2, 0.8, 0, 0.35);
   if (kind === 2) {
-    const i = P(fx.add, x, y, z, 0, 0.5, 0, rr(0.2, 0.35), 0.3, 0.5, F.FIRE + ((R() * 4) | 0), C.flame0, C.flame1, 0.9, 0, -1, 0, 0, 0.3);
-    fx.add.nf[i] = 6;
+    const i = P(fx.add, x, y, z, 0, 0.5, 0, rr(0.25, 0.4), 0.45, 0.7, F.FIRE + ((R() * 4) | 0), C.flame0, C.flame1, 0.9, 0, -1, 0, 0, 0.3);
+    fx.add.nf[i] = 6; fx.add.occ[i] = 0.4;
   }
 }

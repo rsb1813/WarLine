@@ -106,7 +106,7 @@ export class Debris {
         }
         if (trail[i] > 0) {
           tacc[i] += dt;
-          if (tacc[i] > 0.045) {
+          if (tacc[i] > 0.04) {
             tacc[i] = 0;
             onTrail(px[i], py[i], pz[i], trail[i], Math.hypot(vx[i], vy[i], vz[i]));
           }

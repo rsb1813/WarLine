@@ -2,11 +2,11 @@
 // Same conventions as guns: metres, forward = -Z, origin at the grip (launchers/tools) or the item centre.
 import * as THREE from 'three';
 import type { AttachmentDef, GadgetKind, GunModelSpec, SlotId, WeaponDef } from '../types';
-import { Kit, rrect, circlePts, hollowZ, planeGeo, circleGeo, torusGeo, cylGeo } from './vm-geo';
+import { Kit, rrect, hollowZ, planeGeo, circleGeo, torusGeo, cylGeo } from './vm-geo';
 import { GunCtx, gunMats, handAnchor, HandSpec, Lay, pistolGrip, triggerGuard } from './vm-gunparts';
 import * as M from './vm-mats';
 
-const OLIVE = 0x4c5139, TAN = 0x8a7a58, DARKG = 0x2b2e2a;
+const OLIVE = 0x4c5139;
 
 function mini(root: THREE.Group, color: number, accent: number): GunCtx {
   const spec: GunModelSpec = { body: 'rifle', length: 0.5, barrel: 0.3, mag: 'box', color, accent, rail: true };
@@ -257,7 +257,7 @@ function atmine(g: THREE.Group): void {
   k.tubeY(g, 0.05, 0.055, 0.016, M.polymer(0x3a3f2c, 0.7), 0, 0.048, 0, 28);
   k.tubeY(g, 0.018, 0.018, 0.012, M.polymer(0xb0201a, 0.6), 0, 0.06, 0, 16);
   const h = k.mesh(g, torusGeo(0.04, 0.006, 6, 18, Math.PI), dark, 0, 0.0, R + 0.002);
-  h.rotation.x = -Math.PI / 2;
+  h.rotation.x = Math.PI / 2;
   g.userData.mag = anchor(g, 'mag', 0, 0, 0);
   g.userData.muzzle = anchor(g, 'muzzle', 0, 0, -R);
   sightAt(g, 0, 0.2, 0.2, 0.3);
@@ -341,7 +341,7 @@ function sensor(g: THREE.Group): void {
   k.tubeY(g, 0.024, 0.026, 0.08, body, 0, 0, 0, 18);
   k.sphere(g, 0.023, M.glass(0x1a1010, 0.85), 0, 0.04, 0, 1, 0.8, 1).renderOrder = 8;
   k.tubeY(g, 0.027, 0.027, 0.01, dark, 0, 0.036, 0, 18);
-  k.tubeY(g, 0.002, 0.18 * 0.0 + 0.002, 0.09, M.metal(0x222222, 0.4, 0.8), 0.015, 0.09, 0, 6);
+  k.tubeY(g, 0.002, 0.002, 0.09, M.metal(0x222222, 0.4, 0.8), 0.015, 0.09, 0, 6);
   k.mesh(g, new THREE.ConeGeometry(0.012, 0.07, 10), M.metal(0x555a5e, 0.4, 0.8), 0, -0.075, 0, Math.PI, 0, 0);
   k.tubeY(g, 0.02, 0.02, 0.008, dark, 0, -0.038, 0, 16);
   const led = k.mesh(g, circleGeo(0.003, 10), ownGlow(0xff2a20), 0, 0.012, -0.0262, 0, Math.PI, 0);
@@ -367,8 +367,7 @@ function beacon(g: THREE.Group): void {
   k.tubeY(g, 0.0025, 0.0025, 0.2, M.metal(0x222222, 0.5, 0.7), -0.03, 0.17, 0.0, 6);
   k.tubeY(g, 0.006, 0.006, 0.02, dark, -0.03, 0.075, 0, 10);
   for (const sx of [-1, 1]) k.box(g, 0.01, 0.04, 0.01, dark, sx * 0.035, -0.09, 0, 0.002);
-  const hd = k.mesh(g, torusGeo(0.03, 0.005, 6, 16, Math.PI), dark, 0, 0.07, 0.033);
-  void hd;
+  k.mesh(g, torusGeo(0.03, 0.005, 6, 16, Math.PI), dark, 0, 0.07, 0.033);
   g.userData.mag = anchor(g, 'mag', 0, 0, 0);
   g.userData.muzzle = anchor(g, 'muzzle', 0, 0, -0.03);
   sightAt(g, 0, 0.2, 0.2, 0.3);
@@ -512,4 +511,3 @@ export function buildGadgetGroup(kind: GadgetKind | string, id: string): THREE.G
   return g;
 }
 
-export { circlePts };
