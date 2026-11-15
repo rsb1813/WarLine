@@ -24,7 +24,7 @@ interface Wind { a: AudioBufferSourceNode; b: AudioBufferSourceNode; lp: BiquadF
 const DEFAULT_SOUND: GunSound = { kind: 'rifle', pitch: 1, punch: 1 };
 const LOUD: Record<S.GunKind, number> = { rifle: 1, carbine: 0.95, smg: 0.8, lmg: 1.05, dmr: 1.1, sniper: 1.25, shotgun: 1.15, pistol: 0.72 };
 const GUN_VARS: Record<S.GunDist, number> = { own: 2, near: 2, mid: 1, far: 1 };
-const GUN_SR: Record<S.GunDist, number> = { own: 48000, near: 32000, mid: 16000, far: 16000 };
+const GUN_SR: Record<S.GunDist, number> = { own: 48000, near: 24000, mid: 16000, far: 16000 };
 const SPACING: Record<S.GunKind, number> = { rifle: 0.085, carbine: 0.075, lmg: 0.07, smg: 0.06, dmr: 0.4, sniper: 1.6, shotgun: 0.9, pistol: 0.3 };
 
 const d3 = (a: Vec3, b: Vec3): number => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
@@ -517,7 +517,7 @@ export class AudioSys {
     for (const k of Object.keys(S.GUN) as S.GunKind[]) this.prewarmQ.push(() => this.gunBuf(k, 1, 'far', false, 0));
     const q = this.prewarmQ;
     q.push(() => this.cueBuf('tick', 0), () => this.cueBuf('head', 0), () => this.cueBuf('kill', 0));
-    q.push(() => this.buf('expN#0', 32000, (sr) => S.explosionNear(sr, 0)), () => this.buf('expF#0', 16000, (sr) => S.explosionFar(sr, 0, false)));
+    q.push(() => this.buf('expN#0', 24000, (sr) => S.explosionNear(sr, 0)), () => this.buf('expF#0', 16000, (sr) => S.explosionFar(sr, 0, false)));
     for (const s of ['snow', 'hard', 'dirt', 'metal', 'wood', 'water'] as S.StepSurf[]) q.push(() => this.buf(`step_${s}#0`, 32000, (sr) => S.footstep(sr, s, 0)));
     for (const s of ['hard', 'soft', 'metal', 'wood', 'glass'] as S.ImpactSurf[]) q.push(() => this.buf(`imp_${s}#0`, 32000, (sr) => S.impact(sr, s, 0)));
     for (const k of ['wind', 'diesel', 'clatter', 'whine', 'tires', 'rotor', 'hiss'] as S.LoopKind[]) q.push(() => this.loopBuf(k));
@@ -734,7 +734,7 @@ export class AudioSys {
     switch (kind) {
       case 'cannon': {
         const near = own || d < 70;
-        const buf = near ? this.buf(`cannonN#${e.v & 1}`, 32000, (sr) => S.cannonNear(sr, e.v & 1)) : this.buf('cannonF#0', 16000, (sr) => S.explosionFar(sr, 0, true));
+        const buf = near ? this.buf(`cannonN#${e.v & 1}`, 24000, (sr) => S.cannonNear(sr, e.v & 1)) : this.buf('cannonF#0', 16000, (sr) => S.explosionFar(sr, 0, true));
         const gain = own ? 0.95 : 1.25 * att(d, 15);
         this.play(buf, { pos, gain, delay, rate: jit(0.06), pri: own ? 10 : gain * 2, send: own ? 0.25 : sendFar + 0.1 });
         if (own) { this.duckTo(0.25, 0.4); const rv = this.handle('bolt', 1.1, 0.35, 5); if (rv) this.reloadVoices.push(rv); }
@@ -780,7 +780,7 @@ export class AudioSys {
     const delay = d > 40 ? Math.min(1.5, d / SOUND_SPEED) : 0;
     const near = d < 110;
     const v = Math.floor(Math.random() * 2);
-    const buf = near ? this.buf(`expN#${v}`, 32000, (sr) => S.explosionNear(sr, v)) : this.buf(`expF#${v}`, 16000, (sr) => S.explosionFar(sr, v, false));
+    const buf = near ? this.buf(`expN#${v}`, 24000, (sr) => S.explosionNear(sr, v)) : this.buf(`expF#${v}`, 16000, (sr) => S.explosionFar(sr, v, false));
     const gain = 1.15 * Math.min(1.4, size) * att(d, 12);
     this.play(buf, { pos: e.pos, gain, rate, delay, pri: 3 + gain, send: 0.25 + 0.3 * clamp(d / 200, 0, 1) });
     // 가까우면: 먹먹해지고 귀가 울린다

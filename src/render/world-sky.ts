@@ -21,7 +21,7 @@ export interface Palette {
 }
 
 export function paletteFor(time: MapDef['time'], seed: number): Palette {
-  const az = 145 + (Math.abs(seed) % 70);
+  const az = -40 + (Math.abs(seed) % 80);
   if (time === 'dusk') return {
     zenith: 0x34426a, horizon: 0xdba48c, below: 0x9c8486,
     sunColor: 0xffa060, sunIntensity: 3.8, sunElev: 5.5, sunAzim: az + 60,
@@ -54,7 +54,7 @@ export function paletteFor(time: MapDef['time'], seed: number): Palette {
     hemiSky: 0xc2d3e8, hemiGround: 0x98a0a8, hemiIntensity: 0.42, hemiLow: 1.5,
     ambient: 0xffffff, ambientIntensity: 0.1,
     envIntensity: 0.85, envBelow: 0xd2d8de,
-    fogDensity: 0.0025, exposure: 1.0,
+    fogDensity: 0.0025, exposure: 0.95,
     cloudCover: 0.53, cloudAlpha: 0.85, cloudLit: 0xf6f8fa, cloudDark: 0xa4afbd,
     glow: 1.0, horizGlow: 0.14, sunDisk: 1,
     sparkle: 1.6,
@@ -95,7 +95,7 @@ void main() {
   vec3 col = mix(uHorizon, uZenith, pow(hp, 0.55));
   col = mix(col, uHorizon, exp(-hp * 22.0) * 0.45);
   float sd = max(dot(d, uSunDir), 0.0);
-  col += uSunCol * (pow(sd, 6.0) * 0.16 + pow(sd, 48.0) * 0.32) * uGlow;
+  col += uSunCol * (pow(sd, 8.0) * 0.1 + pow(sd, 64.0) * 0.3) * uGlow;
   col += uSunCol * pow(sd, 2.5) * exp(-hp * 9.0) * uHorizGlow;
   float cov = 0.0;
   if (h > 0.0) {
@@ -191,8 +191,8 @@ export class Sky {
     this.disposeMountains();
     this.center.copy(center);
     const layers = [
-      { r: 1040, hMin: 25, hMax: 130, hazeTop: 0.42, rough: 1.0 },
-      { r: 1260, hMin: 70, hMax: 260, hazeTop: 0.6, rough: 0.8 },
+      { r: 1040, hMin: 25, hMax: 140, hazeTop: 0.3, rough: 1.0 },
+      { r: 1260, hMin: 70, hMax: 270, hazeTop: 0.5, rough: 0.8 },
     ];
     const N = 220;
     const rows = [0, 0.4, 0.75, 1];
@@ -210,14 +210,14 @@ export class Sky {
         const cx = Math.cos(a), sz = Math.sin(a);
         const k = 3.2 * ly.rough;
         let ridge = 1 - Math.abs(nA(cx * k + 10, sz * k + 10) * 2 - 1);
-        ridge = ridge * ridge;
+        ridge = Math.pow(ridge, 2.2);
         const broad = nB(cx * 1.3 + 5, sz * 1.3 + 5);
         let hgt = ly.hMin + (ly.hMax - ly.hMin) * (0.35 * broad + 0.65 * ridge);
         if (lowDir) {
           const li = Math.floor((i / N) * lowDir.length) % lowDir.length;
           hgt *= 1 - 0.55 * lowDir[li];
         }
-        const snowy = 0.55 + 0.45 * nB(cx * 6 + 2, sz * 6 + 2);
+        const snowy = (0.5 + 0.5 * nB(cx * 6 + 2, sz * 6 + 2)) * (0.45 + 0.55 * nA(cx * 45 + 3, sz * 45 + 3));
         for (let r = 0; r < rows.length; r++) {
           const t = rows[r];
           const jitter = r === rows.length - 1 ? 0 : (nA(cx * 20 + r, sz * 20) - 0.5) * 8;

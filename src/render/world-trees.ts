@@ -21,7 +21,7 @@ function pineGeometry(snowAmt: number, seed: number): THREE.BufferGeometry {
     { y0: 0.5, y1: 0.85, r: 0.58 },
     { y0: 0.66, y1: 1.0, r: 0.36 },
   ];
-  const green = new THREE.Color().setHex(0x1e3222), green2 = new THREE.Color().setHex(0x2a4030);
+  const green = new THREE.Color().setHex(0x1a2b20), green2 = new THREE.Color().setHex(0x26392b);
   const under = new THREE.Color().setHex(0x152017), snow = new THREE.Color().setHex(0xe6edf3);
   const parts: THREE.BufferGeometry[] = [];
   const M = 11;
@@ -32,15 +32,15 @@ function pineGeometry(snowAmt: number, seed: number): THREE.BufferGeometry {
     const c = new THREE.Color();
     const push = (x: number, y: number, z: number, cc: THREE.Color) => { pos.push(x, y, z); col.push(cc.r, cc.g, cc.b); return pos.length / 3 - 1; };
     // 위 원뿔: 꼭대기, 중간 고리, 가장자리 고리(들쭉날쭉, 처짐)
-    const apex = push(0, T.y1, 0, c.copy(green2).lerp(snow, Math.min(1, snowAmt * 0.9)));
+    const apex = push(0, T.y1, 0, c.copy(green2).lerp(snow, Math.min(1, snowAmt * 0.75)));
     const mid: number[] = [], rim: number[] = [];
     for (let k = 0; k < M; k++) {
       const a = (k / M) * Math.PI * 2 + t * 0.7;
       const rr = T.r * (k % 2 ? 0.78 : 1) * (0.9 + r() * 0.2);
       const my = T.y1 + (T.y0 - T.y1) * 0.5;
-      mid.push(push(Math.cos(a) * rr * 0.52, my + 0.01, Math.sin(a) * rr * 0.52, c.copy(green).lerp(snow, snowAmt * (0.55 + r() * 0.3))));
+      mid.push(push(Math.cos(a) * rr * 0.52, my + 0.01, Math.sin(a) * rr * 0.52, c.copy(green).lerp(snow, snowAmt * (0.3 + r() * 0.35))));
       const droop = k % 2 ? 0.01 : -0.035;
-      rim.push(push(Math.cos(a) * rr, T.y0 + droop, Math.sin(a) * rr, c.copy(green).lerp(snow, snowAmt * (0.12 + r() * 0.2))));
+      rim.push(push(Math.cos(a) * rr, T.y0 + droop, Math.sin(a) * rr, c.copy(green).lerp(snow, snowAmt * (0.04 + r() * 0.14))));
     }
     for (let k = 0; k < M; k++) {
       const k2 = (k + 1) % M;
@@ -153,7 +153,7 @@ export class TreeLayer {
     const trunkMat = new THREE.MeshStandardMaterial({ map: barkTex(), roughness: 0.95, metalness: 0 });
     const branchMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, metalness: 0 });
     addSway(branchMat, sh, 0.02, 'branch');
-    const crownMat = new THREE.MeshStandardMaterial({ map: twigTex(), alphaTest: 0.5, roughness: 0.95, metalness: 0, side: THREE.DoubleSide, color: 0x4d3a35 });
+    const crownMat = new THREE.MeshStandardMaterial({ map: twigTex(), alphaTest: 0.4, roughness: 0.95, metalness: 0, side: THREE.DoubleSide, color: 0x6a5856 });
     addSway(crownMat, sh, 0.03, 'crown');
     const defs: [Part, THREE.BufferGeometry, THREE.Material, boolean][] = [
       ['foliage', foliageGeo, foliageMat, true],

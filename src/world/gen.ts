@@ -73,7 +73,8 @@ export function genWorld(def: MapDef, flagCount: number): World {
 
   buildingPads(G);
   const br = rng(seed ^ 0x5bd1e995);
-  for (const p of G.plans) buildBuilding(w, p, br);
+  const gfn = (x: number, z: number): number => H(G, x, z);
+  for (const p of G.plans) buildBuilding(w, p, br, gfn);
   groundTypes(G, seed);
   buildBridges(G);
   for (const fn of G.later) fn();
@@ -491,7 +492,7 @@ function buildingPads(G: Gen): void {
   const w = G.w, n = w.hfN, c = w.hfCell, s = n + 1, Hh = w.heights;
   const V = s * s;
   const sw = new Float32Array(V), swt = new Float32Array(V), mx = new Float32Array(V);
-  const inner = 1.0, outer = 5.0;
+  const inner = 1.8, outer = 6.0;
   for (const p of G.plans) {
     const st = rectStats(G, p.x0, p.z0, p.x1, p.z1);
     const target = (st.avg * 2 + st.max) / 3;
@@ -559,7 +560,7 @@ function groundTypes(G: Gen, seed: number): void {
     let g: number;
     if (th === 'snow') { g = a > 0.64 ? 1 : 0; if (b > 0.77) g = 5; }
     else if (th === 'tundra') { g = a > 0.6 ? 0 : 1; if (b > 0.72) g = 2; }
-    else { g = a > 0.56 ? 0 : 1; if (b > 0.64) g = 5; else if (b < 0.3 && a < 0.45) g = 2; }
+    else { g = a > 0.62 ? 0 : a < 0.4 ? 4 : 1; if (b > 0.56) g = 5; else if (b < 0.3 && a > 0.45) g = 2; }
     const k = j * s + i;
     const h00 = Hh[k], h10 = Hh[k + 1], h01 = Hh[k + s], h11 = Hh[k + s + 1];
     const rng4 = Math.max(h00, h10, h01, h11) - Math.min(h00, h10, h01, h11);

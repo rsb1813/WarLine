@@ -149,10 +149,10 @@ function aroundPoint(G: Gen, cx: number, cz: number, r0: number, r1: number): [n
 /** 거점 원 안 엄폐물 */
 function flagCover(G: Gen, f: FlagPlan): void {
   const ind = G.def.theme === 'industrial';
-  const want = 6 + Math.floor(G.r() * 4) + (f.r > 17 ? 1 : 0);
+  const want = 9 + Math.floor(G.r() * 4) + (f.r > 17 ? 2 : 0);
   let n = 0;
-  for (let k = 0; k < want * 5 && n < want; k++) {
-    const [x, z] = aroundPoint(G, f.x, f.z, 4.5, f.r + 3);
+  for (let k = 0; k < want * 6 && n < want; k++) {
+    const [x, z] = aroundPoint(G, f.x, f.z, 6.5, f.r + 5);
     const ax = G.r() < 0.5;
     const t = G.r();
     let ok = false;
@@ -215,14 +215,14 @@ export function flagCluster(G: Gen, f: FlagPlan): void {
   const ind = G.def.theme === 'industrial';
   switch (f.kind) {
     case 'harbor': {
-      placeMany(G, cx, cz, r0, r1, [['warehouse', '', 2], ['office', '', 1], ['shed', '', 2], ['house', '', 1]]);
+      placeMany(G, cx, cz, r0, r1, [['warehouse', '', 2], ['office', '', 1], ['shed', '', 2], ['house', '', 2]]);
       const [yx, yz] = aroundPoint(G, cx, cz, f.r + 6, f.r + 16);
       containerYard(G, yx, yz, 3, 3);
       pier(G, f);
       break;
     }
     case 'bridge': {
-      placeMany(G, cx, cz, r0, r1, [['house', '', 3], ['shed', '', 2]]);
+      placeMany(G, cx, cz, r0, r1, [['house', '', 4], ['shed', '', 2], ['office', '', 1]]);
       const b = G.bridges[f.bridge];
       if (b) {
         const ez = Math.abs(cz - b.z0) < Math.abs(cz - b.z1) ? b.z0 - 3 : b.z1 + 3;
@@ -242,12 +242,12 @@ export function flagCluster(G: Gen, f: FlagPlan): void {
         const D = dims(G, 'tower', 'bell');
         if (!tryPlace(G, planAt(G, 'tower', 'bell', D, bx, bz, cx, cz), 0.6)) tryPlace(G, planAt(G, 'tower', 'bell', D, ch.x0 - 3.4, bz, cx, cz), 0.6);
       }
-      const hs = placeMany(G, cx, cz, r0, r1, [['house', '', 4], ['shed', '', 1]]);
+      const hs = placeMany(G, cx, cz, r0, r1, [['house', '', 5], ['shed', '', 2]]);
       for (const p of hs) if (p.style === 'house' && G.r() < 0.6) yardFence(G, p);
       break;
     }
     case 'farm': {
-      placeMany(G, cx, cz, r0, r1, [['warehouse', 'barn', 1], ['house', '', 2], ['shed', '', 3]]);
+      placeMany(G, cx, cz, r0, r1, [['warehouse', 'barn', 1], ['house', '', 3], ['shed', '', 3]]);
       for (let i = 0; i < 2; i++) {
         const [fx, fz] = aroundPoint(G, cx, cz, f.r + 10, f.r + 30);
         const fw = rr(G, 18, 30), fd = rr(G, 14, 22);
@@ -259,11 +259,11 @@ export function flagCluster(G: Gen, f: FlagPlan): void {
     case 'school': {
       const s = placeAround(G, cx, cz, r0, r0 + 16, 'office', 'school', 60);
       if (s) perimeterFence(G, s.x0 - 6, s.z0 - 6, s.x1 + 6, s.z1 + 6, true);
-      placeMany(G, cx, cz, r0, r1, [['shed', '', 1], ['house', '', 2]]);
+      placeMany(G, cx, cz, r0, r1, [['shed', '', 1], ['house', '', 3], ['apartment', '', 1]]);
       break;
     }
     case 'square': {
-      placeMany(G, cx, cz, r0 + 4, r1, [['apartment', '', ind ? 2 : 3], ['office', '', 1], ['house', '', 1]]);
+      placeMany(G, cx, cz, r0 + 4, r1, [['apartment', '', ind ? 2 : 3], ['office', '', 1], ['house', '', 2]]);
       // 기념비
       const [sx, sz] = aroundPoint(G, cx, cz, 6, 9);
       propBox(G, 'prop', 'concrete', sx - 1.6, sz - 1.6, sx + 1.6, sz + 1.6, 0.8, 0x8d8a84, { destructible: false });
@@ -274,7 +274,7 @@ export function flagCluster(G: Gen, f: FlagPlan): void {
       break;
     }
     case 'depot': {
-      placeMany(G, cx, cz, r0, r1, [['warehouse', '', ind ? 3 : 2], ['shed', '', 1], ['office', '', 1]]);
+      placeMany(G, cx, cz, r0, r1, [['warehouse', '', ind ? 3 : 2], ['shed', '', 2], ['office', '', 1]]);
       const [yx, yz] = aroundPoint(G, cx, cz, f.r + 4, f.r + 14);
       containerYard(G, yx, yz, 2, 3);
       for (let i = 0; i < 4; i++) { const [px, pz] = aroundPoint(G, cx, cz, 6, f.r + 12); crates(G, px, pz); }
@@ -285,7 +285,7 @@ export function flagCluster(G: Gen, f: FlagPlan): void {
       const [tx, tz] = aroundPoint(G, cx, cz, f.r + 8, f.r + 16);
       let made = 0;
       for (let i = 0; i < 3 && made < 6; i++) for (let j = 0; j < 2; j++) if (fuelTank(G, tx + (i - 1) * 11, tz + (j - 0.5) * 11, rr(G, 6, 8.5))) made++;
-      placeMany(G, cx, cz, r0, r1, [['tower', '', 1], ['warehouse', '', 1], ['office', '', 1], ['shed', '', 1]]);
+      placeMany(G, cx, cz, r0, r1, [['tower', '', 1], ['warehouse', '', 2], ['office', '', 1], ['shed', '', 2]]);
       for (let i = 0; i < 5; i++) {
         // 땅 위 배관 (낮은 엄폐물)
         const [px, pz] = aroundPoint(G, cx, cz, 6, f.r + 18);
@@ -297,19 +297,19 @@ export function flagCluster(G: Gen, f: FlagPlan): void {
     }
     case 'radar': {
       placeAround(G, cx, cz, r0, r0 + 10, 'tower', 'radar', 60);
-      placeMany(G, cx, cz, r0, r1, [['office', '', 1], ['shed', '', 2]]);
+      placeMany(G, cx, cz, r0, r1, [['office', '', 1], ['shed', '', 2], ['house', '', 1]]);
       for (let i = 0; i < 4; i++) { const [px, pz] = aroundPoint(G, cx, cz, f.r * 0.6, f.r + 6); sandbagWall(G, px, pz, 4.8, G.r() < 0.5); }
       for (let i = 0; i < 3; i++) { const [px, pz] = aroundPoint(G, cx, cz, f.r, f.r + 14); container(G, px, pz, G.r() < 0.5, false, 1); }
       break;
     }
     case 'checkpoint': {
-      placeMany(G, cx, cz, r0, r1, [['shed', '', 2], ['house', '', 1], ['office', '', 1]]);
+      placeMany(G, cx, cz, r0, r1, [['shed', '', 2], ['house', '', 2], ['office', '', 1]]);
       for (let i = 0; i < 5; i++) { const [px, pz] = aroundPoint(G, cx, cz, 5, f.r); barrier(G, px, pz, 6, G.r() < 0.5); }
       break;
     }
     case 'station': {
       placeAround(G, cx, cz, r0, r0 + 12, 'tower', 'radar', 60);
-      placeMany(G, cx, cz, r0, r1, [['office', '', 1], ['shed', '', 2], ['house', '', 1]]);
+      placeMany(G, cx, cz, r0, r1, [['office', '', 1], ['shed', '', 2], ['house', '', 2]]);
       break;
     }
   }

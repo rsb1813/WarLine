@@ -10,7 +10,7 @@ import type { Palette } from './world-sky';
 /** 지면 종류별 색 (sRGB): [기본, 변형, 셋째] */
 const GROUND_COLS: [number, number, number][] = [
   [0xedf1f6, 0xd2dce7, 0xe4e9ef], // 0 눈
-  [0x6b6742, 0x7a6946, 0x8b8757], // 1 툰드라
+  [0x6a6250, 0x7b6c55, 0x8a8063], // 1 툰드라
   [0x4b3b2e, 0x3b332b, 0x55453a], // 2 흙
   [0x3b3d40, 0x46474a, 0x333538], // 3 아스팔트
   [0x8b8a85, 0x797873, 0x96948e], // 4 콘크리트
@@ -201,7 +201,7 @@ export class TerrainLayer {
     const hillAmp = 18 + 45 * w.def.hills;
     const theme = w.def.theme;
     const far = lin(theme === 'tundra' ? 0x9a9a7e : theme === 'industrial' ? 0xd2d5d8 : 0xe9eef4);
-    const farSnow = lin(0xe6ecf2), farVeg = lin(0x737048), silt = lin(SILT);
+    const farSnow = lin(0xe6ecf2), farVeg = lin(0x746a56), silt = lin(SILT);
     const pos = new Float32Array(R * NK * 3), nor = new Float32Array(R * NK * 3);
     const col = new Float32Array(R * NK * 3), gr = new Float32Array(R * NK * 4);
     const c = new THREE.Color(), e = new THREE.Color();

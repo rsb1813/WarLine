@@ -1,6 +1,8 @@
 // render-fx: 인스턴스 빌보드 파티클 풀 (InstancedBufferGeometry + ShaderMaterial).
 // 인스턴스마다 위치·방향·색·알파·크기·회전·칸(플립북)·모드. 모드 0 = 카메라 정면, 1 = 속도 방향으로 늘인 줄(예광탄·불티),
 // 2 = 바닥에 눕힌 판(충격파 고리·물결). 정렬 없음: 가산(불·불티·섬광) 풀과 일반 알파(연기·먼지) 풀을 따로 둔다.
+// 가산 풀은 미리 곱한 알파 혼합(ONE, ONE_MINUS_SRC_ALPHA)이라 파티클마다 '가림'(occ) 0..1 을 줄 수 있다:
+// 0 = 순수 가산(불티·섬광), 0.5 안팎 = 밝은 눈·하늘 앞에서도 주황으로 보이는 불길. (모드 0·2 에서는 iDir.x 에 담는다)
 // CPU 쪽은 구조-배열(SoA) Float32Array 로 밀집 보관(죽으면 맨 끝 것을 옮겨 채움), 프레임마다 쓰는 구간만 올린다.
 import * as THREE from 'three';
 import { GRID } from './fx-textures';
@@ -18,6 +20,7 @@ varying vec2 vUv;
 varying vec4 vCol;
 varying float vShade;
 varying float vDepth;
+varying float vOcc;
 #include <fog_pars_vertex>
 void main() {
   vec2 c = position.xy;
@@ -26,6 +29,7 @@ void main() {
   float mode = iPrm.w;
   vec4 mvPosition;
   vShade = 1.0;
+  vOcc = iDir.x;
   if (mode < 0.5) {
     float cs = cos(rot), sn = sin(rot);
     vec2 rc = vec2(c.x * cs - c.y * sn, c.x * sn + c.y * cs) * size;
@@ -39,6 +43,7 @@ void main() {
     float sl = length(sd);
     sd = sl > 1e-6 ? sd / sl : vec3(1.0, 0.0, 0.0);
     float w = max(size, uPx * 1.6 * max(-pv.z, 0.0));
+    vOcc = 0.0;
     mvPosition = vec4(pv + dv * (c.y - 0.5) + sd * (c.x * w), 1.0);
   } else {
     float cs = cos(rot), sn = sin(rot);
@@ -63,6 +68,7 @@ varying vec2 vUv;
 varying vec4 vCol;
 varying float vShade;
 varying float vDepth;
+varying float vOcc;
 #include <fog_pars_fragment>
 void main() {
   vec4 t = texture2D(uMap, vUv);
@@ -81,12 +87,13 @@ void main() {
   #endif
   #ifdef ADDITIVE
     col *= 1.0 - fogF;
+    a *= 1.0 - fogF;
   #else
     col = mix(col, fogColor, fogF);
   #endif
 #endif
 #ifdef ADDITIVE
-  gl_FragColor = vec4(col, 1.0);
+  gl_FragColor = vec4(col, a * vOcc);
 #else
   gl_FragColor = vec4(col, a);
 #endif
@@ -120,6 +127,8 @@ export class ParticlePool {
   readonly mode: Float32Array; readonly ln: Float32Array; readonly st: Float32Array;
   /** 바닥 높이와 튕김 (> 0 튕김, 0 = 닿으면 멈춤, < 0 = 바닥을 따라 미끄러짐) */
   readonly gy: Float32Array; readonly bnc: Float32Array;
+  /** 가산 풀의 가림 0..1 (모드 0·2) */
+  readonly occ: Float32Array;
 
   private readonly all: Float32Array[];
   private readonly extCap: number;
@@ -139,10 +148,10 @@ export class ParticlePool {
     this.age = f(); this.life = f(); this.s0 = f(); this.s1 = f(); this.rot = f(); this.rv = f();
     this.r0 = f(); this.g0 = f(); this.b0 = f(); this.r1 = f(); this.g1 = f(); this.b1 = f();
     this.al = f(); this.fin = f(); this.fout = f(); this.drag = f(); this.grav = f(); this.wnd = f();
-    this.fr = f(); this.nf = f(); this.mode = f(); this.ln = f(); this.st = f(); this.gy = f(); this.bnc = f();
+    this.fr = f(); this.nf = f(); this.mode = f(); this.ln = f(); this.st = f(); this.gy = f(); this.bnc = f(); this.occ = f();
     this.all = [this.px, this.py, this.pz, this.vx, this.vy, this.vz, this.age, this.life, this.s0, this.s1, this.rot, this.rv,
       this.r0, this.g0, this.b0, this.r1, this.g1, this.b1, this.al, this.fin, this.fout, this.drag, this.grav, this.wnd,
-      this.fr, this.nf, this.mode, this.ln, this.st, this.gy, this.bnc];
+      this.fr, this.nf, this.mode, this.ln, this.st, this.gy, this.bnc, this.occ];
 
     const M = cap + extCap;
     const geo = new THREE.InstancedBufferGeometry();
@@ -180,12 +189,13 @@ export class ParticlePool {
       depthTest: true,
       fog: true,
       side: THREE.DoubleSide,
+      forceSinglePass: true, // 투명 양면 재질을 두 번 그리지 않게
       blending: additive ? THREE.CustomBlending : THREE.NormalBlending,
     });
     if (additive) {
       this.mat.blendEquation = THREE.AddEquation;
       this.mat.blendSrc = THREE.OneFactor;
-      this.mat.blendDst = THREE.OneFactor;
+      this.mat.blendDst = THREE.OneMinusSrcAlphaFactor;
     }
     this.mesh = new THREE.Mesh(geo, this.mat);
     this.mesh.frustumCulled = false;
@@ -214,7 +224,7 @@ export class ParticlePool {
     this.drag[i] = 0; this.grav[i] = 0; this.wnd[i] = 0;
     this.fr[i] = frame; this.nf[i] = 1;
     this.mode[i] = 0; this.ln[i] = 0; this.st[i] = 0;
-    this.gy[i] = -1e9; this.bnc[i] = 0;
+    this.gy[i] = -1e9; this.bnc[i] = 0; this.occ[i] = 0;
     return i;
   }
 
@@ -249,7 +259,7 @@ export class ParticlePool {
   /** 이번 프레임 시작 (외부 인스턴스 비움) */
   begin(): void { this.ext = 0; }
 
-  /** 시뮬레이션 없이 이번 프레임에만 그릴 인스턴스 (연막 구름, 배기 불빛 등). 모드 1 이면 d = 방향×길이 */
+  /** 시뮬레이션 없이 이번 프레임에만 그릴 인스턴스 (연막 구름, 배기 불빛 등). 모드 1 이면 d = 방향×길이, 아니면 dx = 가림 */
   pushExt(x: number, y: number, z: number, size: number, rot: number, frame: number,
     r: number, g: number, b: number, a: number, mode = 0, dx = 0, dy = 0, dz = 0): void {
     if (this.ext >= this.extCap || a <= 0.002) return;
@@ -298,7 +308,7 @@ export class ParticlePool {
 
     const P = this.aPos.array as Float32Array, D = this.aDir.array as Float32Array;
     const C = this.aCol.array as Float32Array, R = this.aPrm.array as Float32Array;
-    const { s0, s1, r0, g0, b0, r1, g1, b1, al, fin, fout, fr, nf, mode, ln, st } = this;
+    const { s0, s1, r0, g0, b0, r1, g1, b1, al, fin, fout, fr, nf, mode, ln, st, occ } = this;
     const base = this.ext;
     const count = this.n;
     for (let k = 0; k < count; k++) {
@@ -311,10 +321,12 @@ export class ParticlePool {
       const m = mode[k];
       P[j * 3] = px[k]; P[j * 3 + 1] = py[k]; P[j * 3 + 2] = pz[k];
       if (m === 1) {
-        const sp = Math.hypot(vx[k], vy[k], vz[k]);
+        const sp = Math.sqrt(vx[k] * vx[k] + vy[k] * vy[k] + vz[k] * vz[k]);
         const L = ln[k] + sp * st[k];
         if (sp > 1e-4) { const s = L / sp; D[j * 3] = vx[k] * s; D[j * 3 + 1] = vy[k] * s; D[j * 3 + 2] = vz[k] * s; }
         else { D[j * 3] = 0; D[j * 3 + 1] = L; D[j * 3 + 2] = 0; }
+      } else {
+        D[j * 3] = occ[k];
       }
       C[j * 4] = (r0[k] + (r1[k] - r0[k]) * t) * lightK;
       C[j * 4 + 1] = (g0[k] + (g1[k] - g0[k]) * t) * lightK;

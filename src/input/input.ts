@@ -123,6 +123,8 @@ export class Input {
     on(document, 'pointerlockerror', () => { this.lockFailed = true; this.lockFails++; this.lockFailAt = performance.now(); });
 
     if (this.touch) {
+      // 어디를 만지든 기록: 손가락이 만든 가짜 마우스 이벤트를 무시하려고
+      on(window, 'touchstart', () => { this.lastTouch = performance.now(); }, { capture: true, passive: true });
       const sink: TouchSink = {
         look: (dx, dy) => { this.tdx += dx; this.tdy += dy; },
         edge: (k: TouchEdge) => { this.edges[k] = true; if (k === 'swap') this.adsToggle = false; },
@@ -259,7 +261,7 @@ export class Input {
   private onKeyDown = (ev: KeyboardEvent): void => {
     if (isTyping(ev.target) || ev.metaKey) return;
     const code = ev.code;
-    if (GAME_KEYS.has(code) && (this.mode !== 'hidden' || this.locked)) ev.preventDefault();
+    if (code === 'Tab' || (GAME_KEYS.has(code) && (this.mode !== 'hidden' || this.locked))) ev.preventDefault();
     if (code === 'Escape') { if (!ev.repeat) this.edges.pause = true; return; }
     if (ev.repeat) return;
     this.keys.add(code);

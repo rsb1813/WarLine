@@ -19,21 +19,21 @@ const base = (o: Partial<BoxMatOpts> & Pick<BoxMatOpts, 'side' | 'top'>): BoxMat
   rough: 0.9, metal: 0, bump: 1.4, snow: 1, drift: 0.8, ...o,
 });
 
-const CONCRETE = base({ side: 'concrete', top: 'concreteTop', sideTile: [3, 3], topTile: [3, 3], second: 0x4a4a48, grime: 0x37332f, grimeAmt: 0.55, rough: 0.93, bump: 1.2 });
+const CONCRETE = base({ side: 'concrete', top: 'concreteTop', sideTile: [6, 6], topTile: [6, 6], second: 0x4a4a48, grime: 0x37332f, grimeAmt: 0.7, rough: 0.93, bump: 1.2 });
 const STONE = base({ side: 'rock', top: 'rock', sideTile: [4, 4], topTile: [4, 4], second: 0x8f8c5e, grime: 0x2c2b28, grimeAmt: 0.5, bump: 2.2, drift: 0.6 });
 const FOLIAGE = base({ side: 'foliage', top: 'foliage', second: 0x223322, grime: 0x16221a, grimeAmt: 0.5, rough: 0.95, bump: 2.6, snow: 1.1, drift: 0.6 });
 
 const CLASSES: Record<ClassKey, ClassDef> = {
   concrete: { geo: 'box', mat: CONCRETE, cast: true, spare: 16 },
-  brick: { geo: 'box', mat: base({ side: 'brick', top: 'concreteTop', topTile: [3, 3], second: 0xb0a99f, grime: 0x2c2826, grimeAmt: 0.5, bump: 1.7 }), cast: true, spare: 16 },
-  woodwall: { geo: 'box', mat: base({ side: 'siding', top: 'planks', second: 0x8a7f70, grime: 0x3d362f, grimeAmt: 0.45, rough: 0.86, bump: 1.5 }), cast: true, spare: 16 },
-  metalwall: { geo: 'box', mat: base({ side: 'corrugated', top: 'roofmetal', second: 0x7a4526, grime: 0x4a3a30, grimeAmt: 0.5, rough: 0.55, metal: 0.45, bump: 1.4 }), cast: true, spare: 16 },
+  brick: { geo: 'box', mat: base({ side: 'brick', top: 'concreteTop', topTile: [6, 6], second: 0xb0a99f, grime: 0x2c2826, grimeAmt: 0.5, bump: 1.7 }), cast: true, spare: 16 },
+  woodwall: { geo: 'box', mat: base({ side: 'siding', top: 'planks', second: 0x7d766c, grime: 0x3d362f, grimeAmt: 0.5, rough: 0.86, bump: 1.5 }), cast: true, spare: 16 },
+  metalwall: { geo: 'box', mat: base({ side: 'corrugated', top: 'roofmetal', second: 0x5e3622, grime: 0x4a3a30, grimeAmt: 0.5, rough: 0.55, metal: 0.45, bump: 1.4 }), cast: true, spare: 16 },
   floorwood: { geo: 'box', mat: base({ side: 'siding', top: 'planks', second: 0x2a241f, grime: 0x3d362f, grimeAmt: 0.35, rough: 0.82, bump: 1.2 }), cast: true, spare: 16 },
   floorconc: { geo: 'box', mat: { ...CONCRETE, side: 'concrete', top: 'concreteTop' }, cast: true, spare: 16 },
   roofmetal: { geo: 'box', mat: base({ side: 'plate', top: 'roofmetal', second: 0x7a4526, grime: 0x34302c, grimeAmt: 0.5, rough: 0.6, metal: 0.4, bump: 1.2, snow: 1.2, drift: 0 }), cast: true, spare: 16 },
-  rooftar: { geo: 'box', mat: base({ side: 'concrete', top: 'tar', sideTile: [3, 3], topTile: [4, 4], second: 0x4a4a48, grime: 0x262628, grimeAmt: 0.5, rough: 0.9, bump: 1.0, snow: 1.2, drift: 0 }), cast: true, spare: 16 },
+  rooftar: { geo: 'box', mat: base({ side: 'concrete', top: 'tar', sideTile: [6, 6], topTile: [4, 4], second: 0x4a4a48, grime: 0x262628, grimeAmt: 0.5, rough: 0.9, bump: 1.0, snow: 1.2, drift: 0 }), cast: true, spare: 16 },
   roofwood: { geo: 'box', mat: base({ side: 'siding', top: 'shingles', second: 0x58504a, grime: 0x2a2622, grimeAmt: 0.4, rough: 0.88, bump: 1.5, snow: 1.2, drift: 0 }), cast: true, spare: 16 },
-  container: { geo: 'box', mat: base({ side: 'container', top: 'roofmetal', sideTile: [2.4, 1], uvMode: 2, second: 0x6e3a1e, grime: 0x3e3430, grimeAmt: 0.45, rough: 0.55, metal: 0.35, bump: 1.6, snow: 1.1, drift: 0.6 }), cast: true, spare: 8 },
+  container: { geo: 'box', mat: base({ side: 'container', top: 'roofmetal', sideTile: [2.4, 1], uvMode: 2, second: 0x5a3220, grime: 0x3e3430, grimeAmt: 0.45, rough: 0.55, metal: 0.35, bump: 1.6, snow: 1.1, drift: 0.6 }), cast: true, spare: 8 },
   sandbag: { geo: 'box', mat: base({ side: 'sandbag', top: 'sandbag', sideTile: [1.2, 1.2], topTile: [1.2, 1.2], second: 0x2e2a22, grime: 0x4a4030, grimeAmt: 0.4, rough: 0.96, bump: 2.4 }), cast: true, spare: 16 },
   crate: { geo: 'box', mat: base({ side: 'crate', top: 'crate', sideTile: [1, 1], topTile: [1, 1], uvMode: 1, second: 0x241e1a, grime: 0x3a3028, grimeAmt: 0.35, rough: 0.86, bump: 1.6, drift: 0.5 }), cast: true, spare: 16 },
   metalprop: { geo: 'box', mat: base({ side: 'plate', top: 'plate', second: 0x6e4a32, grime: 0x3a342e, grimeAmt: 0.45, rough: 0.5, metal: 0.5, bump: 1.0, drift: 0.6 }), cast: true, spare: 16 },

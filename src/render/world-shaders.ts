@@ -143,7 +143,7 @@ ${PERTURB}`)
   float grime = clamp(tx.b * uGrime + low * uBaseDirt, 0.0, 1.0);
   alb = mix(alb, uGrimeCol, grime * 0.75);
   float topSnow = smoothstep(0.55, 0.9, wn.y) * smoothstep(0.25, 0.6, tx.r + tx.a * 0.3);
-  float drift = (1.0 - isTop) * (1.0 - smoothstep(0.02, 0.18 + 0.3 * tx.r, hgt)) * uDrift;
+  float drift = (1.0 - isTop) * (1.0 - smoothstep(0.0, 0.04 + 0.24 * tx.r * tx.r, hgt)) * uDrift;
   wlSnow = clamp((topSnow * uSnow + drift) * uSnowAmt, 0.0, 1.0);
   alb = mix(alb, uSnowCol * (0.92 + 0.08 * tx.r), wlSnow);
   diffuseColor.rgb = alb;
@@ -199,18 +199,27 @@ vec4 wlGw = vGround / max(vGround.x + vGround.y + vGround.z + vGround.w, 1e-3);
 float wlMacro = wd2.g;
 {
   float mSnow = 0.93 + 0.07 * wd1.r + 0.05 * (wd3.r - 0.5) * wlNear + (wlMacro - 0.5) * 0.08;
-  vec3 mVeg = mix(vec3(0.7, 0.68, 0.55), vec3(1.2, 1.12, 0.92), wd1.r) * (0.85 + 0.3 * mix(0.5, wd3.g, wlNear)) * (0.82 + 0.36 * wlMacro);
+  vec3 mVeg = mix(vec3(0.6, 0.58, 0.52), vec3(1.25, 1.12, 0.95), wd1.r) * (0.72 + 0.56 * mix(0.5, wd3.g, wlNear)) * (0.8 + 0.4 * wlMacro);
   float crack = 1.0 - smoothstep(0.0, 0.07, wd2.b);
   float mHard = (0.86 + 0.24 * wd1.r + 0.14 * (wd3.r - 0.5) * wlNear) * (1.0 - 0.32 * crack) * (0.9 + 0.2 * wlMacro);
   float mRough = (0.72 + 0.5 * mix(0.5, wd3.b, wlNear)) * (0.85 + 0.3 * wd1.r) * (0.85 + 0.3 * wlMacro);
   diffuseColor.rgb *= wlGw.x * mSnow + wlGw.y * mVeg + wlGw.z * mHard + wlGw.w * mRough;
+  float speck = wlGw.y * smoothstep(0.56, 0.7, wd1.r * 0.55 + mix(0.5, wd3.g, wlNear) * 0.45) * 0.75;
+  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.84, 0.88, 0.93), speck);
   wlH = wlGw.x * wd1.r * 0.3 + wlGw.y * (wd1.r * 0.5 + wd3.g * 0.5 * wlNear) + wlGw.z * (wd1.r * 0.2 - crack * 0.5) + wlGw.w * (wd3.b * 0.8 * wlNear + wd1.r * 0.3);
   wlSnow = wlGw.x;
 }`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
 roughnessFactor = wlGw.x * (0.6 + 0.15 * wd1.r) + wlGw.y * 0.95 + wlGw.z * 0.84 + wlGw.w * 0.9;`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
-normal = wlPerturb(-vViewPosition, normal, vec2(dFdx(wlH), dFdy(wlH)) * uBump, faceDirection);`)
+normal = wlPerturb(-vViewPosition, normal, vec2(dFdx(wlH), dFdy(wlH)) * uBump, faceDirection);
+{
+  // 바람에 깎인 눈결 (해석적 기울기: 미분 블록 무늬 없음)
+  float ph = dot(wlP, vec2(0.83, 0.56)) * 5.0 + wd1.g * 9.0 + wd2.r * 5.0;
+  float amp = wlGw.x * (1.0 - smoothstep(12.0, 50.0, wlDist)) * 0.09;
+  vec3 gW = vec3(0.83, 0.0, 0.56) * cos(ph) * amp;
+  normal = normalize(normal - (viewMatrix * vec4(gW, 0.0)).xyz);
+}`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
 {
   vec3 vd = normalize(vViewPosition);

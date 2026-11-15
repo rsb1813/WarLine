@@ -88,7 +88,7 @@ export class GeoBuilder {
     return this;
   }
 
-  box(w: number, h: number, d: number, x: number, y: number, z: number, color: number, rx = 0, ry = 0, rz = 0): this {
+  box(w: number, h: number, d: number, x: number, y: number, z: number, color = 0xffffff, rx = 0, ry = 0, rz = 0): this {
     return this.add(new THREE.BoxGeometry(w, h, d), xf(x, y, z, rx, ry, rz), color);
   }
   /** 원기둥 (기본 축 Y) */

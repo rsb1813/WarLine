@@ -69,7 +69,7 @@ export function startApp(root: HTMLElement): void {
 
   function mount(r: Route): () => void {
     switch (r) {
-      case 'play': return mountPlay(ctx, () => ctx.go('battle'));
+      case 'play': return mountPlay(ctx, () => replace('battle')); // 설정 화면 자리를 전투가 차지: 뒤로 = 홈
       case 'settings': return mountSettings(ctx);
       case 'help': return mountHelp(ctx);
       case 'loadout': return mountLoadout();

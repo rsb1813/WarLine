@@ -150,15 +150,18 @@ export type PackId =
 function genConcrete(top: boolean): THREE.DataTexture {
   const S = 512;
   return packTexture(S, S, (u, v, o) => {
-    const blot = tfbm(u, v, 6, 6, 5, top ? 2 : 1);
-    const fine = tnoise(u * 128, v * 128, 128, 128, 3);
+    const blot = tfbm(u, v, 8, 8, 5, top ? 2 : 1);
+    const fine = tnoise(u * 160, v * 160, 160, 160, 3);
     const pore = ih(Math.floor(u * S), Math.floor(v * S), 5) > 0.985 ? 1 : 0;
-    const sx = Math.min(u, 1 - u), sy = Math.min(v, 1 - v);
-    const seam = top ? 0 : 1 - sstep(0.002, 0.007, Math.min(sx, sy));
-    const streakN = tfbm(u, v, 48, 2, 3, 9);
-    const streak = top ? 0 : sstep(0.55, 0.85, streakN) * sstep(0.05, 0.95, v);
-    const big = sstep(0.55, 0.82, tfbm(u, v, 3, 3, 4, 11));
-    o[0] = 0.5 + (blot - 0.5) * 0.32 + (fine - 0.5) * 0.12 - pore * 0.18 + seam * 0.05;
+    // 타일 하나 = 패널 2x2 (패널마다 톤이 조금 다름)
+    const pu = fract(u * 2), pv = fract(v * 2);
+    const pid = ih(Math.floor(u * 2), Math.floor(v * 2), top ? 4 : 6);
+    const sx = Math.min(pu, 1 - pu), sy = Math.min(pv, 1 - pv);
+    const seam = top ? 0 : 1 - sstep(0.004, 0.012, Math.min(sx, sy));
+    const streakN = tfbm(u, v, 64, 4, 3, 9);
+    const streak = top ? 0 : sstep(0.52, 0.8, streakN) * sstep(0.0, 0.9, pv) * (0.5 + pid);
+    const big = sstep(0.5, 0.8, tfbm(u, v, 4, 4, 4, 11));
+    o[0] = 0.5 + (blot - 0.5) * 0.3 + (fine - 0.5) * 0.14 - pore * 0.18 + seam * 0.05 + (pid - 0.5) * (top ? 0.06 : 0.14);
     o[1] = seam;
     o[2] = clamp01(streak * 0.85 + big * 0.45);
     o[3] = 0.6 + (fine - 0.5) * 0.35 + (blot - 0.5) * 0.25 - seam * 0.5 - pore * 0.3;
@@ -198,7 +201,7 @@ function genSiding(): THREE.DataTexture {
     const bid = ih(wrapI(b, N), 0, 31);
     const lip = sstep(0.0, 0.06, fy);
     const grain = Math.sin((fy * 7 + tnoise(u * 12, v * N * 2, 12, N * 2, 33) * 5) * 6.283) * 0.5 + 0.5;
-    const peel = sstep(0.64, 0.7, tfbm(u, v, 8, 8, 5, 35));
+    const peel = sstep(0.7, 0.75, tfbm(u, v, 10, 10, 5, 35) + (1 - v) * 0.04) * (0.6 + 0.4 * tnoise(u * 40, v * 40, 40, 40, 36));
     // 판자 이음(세로 줄) 몇 군데
     const jx = fract(u * 3 + bid * 0.7);
     const joint = 1 - sstep(0.0, 0.006, Math.min(jx, 1 - jx));
@@ -215,7 +218,7 @@ function genCorrugated(): THREE.DataTexture {
   return packTexture(S, S, (u, v, o) => {
     const s = Math.sin(u * 24 * Math.PI * 2);
     const n = tfbm(u, v, 8, 8, 4, 51);
-    const rust = clamp01(sstep(0.62, 0.74, tfbm(u, v, 6, 6, 5, 53)) + sstep(0.3, 0.0, v) * sstep(0.45, 0.7, tfbm(u, v, 40, 3, 3, 55)));
+    const rust = clamp01(sstep(0.7, 0.8, tfbm(u, v, 8, 8, 5, 53)) * 0.8 + sstep(0.3, 0.0, v) * sstep(0.5, 0.72, tfbm(u, v, 40, 3, 3, 55)) + sstep(0.66, 0.85, tfbm(u, v, 30, 2, 3, 54)) * 0.35);
     const lap = 1 - sstep(0.0, 0.01, Math.min(v, 1 - v));
     o[0] = 0.5 + s * 0.04 + (n - 0.5) * 0.14 - lap * 0.12;
     o[1] = rust;
@@ -235,7 +238,8 @@ function genContainer(): THREE.DataTexture {
     const dent = tfbm(u, v, 4, 4, 3, 61);
     const scratch = sstep(0.8, 0.86, tnoise(u * 60, v * 6, 60, 6, 63));
     const rustN = tfbm(u, v, 8, 8, 5, 65);
-    const rust = clamp01(sstep(0.66, 0.76, rustN) + rail * sstep(0.45, 0.6, rustN) + scratch * 0.7 + sstep(0.12, 0.0, v) * sstep(0.5, 0.65, rustN));
+    const streak = sstep(0.62, 0.8, tfbm(u, v, 36, 2, 3, 66)) * sstep(0.2, 0.9, 1 - v) * 0.5;
+    const rust = clamp01(sstep(0.72, 0.8, rustN) * 0.8 + rail * sstep(0.5, 0.62, rustN) + scratch * 0.5 + sstep(0.1, 0.0, v) * sstep(0.52, 0.66, rustN) + streak);
     o[0] = rail ? 0.38 : 0.5 + prof * 0.04 + (dent - 0.5) * 0.12;
     o[1] = rust;
     o[2] = clamp01(sstep(0.55, 0.85, tfbm(u, v, 24, 2, 3, 67)) * 0.6 + sstep(0.25, 0.0, v) * 0.4);
@@ -517,14 +521,36 @@ export function barkTex(): THREE.DataTexture {
   }));
 }
 
-/** 겨울 자작나무 잔가지 덩어리 (A = 덮임) */
-export function twigTex(): THREE.DataTexture {
-  return cached('twigs', () => packTexture(128, 128, (u, v, o) => {
-    const n = tfbm(u, v, 12, 12, 4, 241);
-    const lines = 1 - sstep(0.0, 0.08, Math.abs(tfbm(u, v, 6, 6, 3, 243) - 0.5));
-    const a = Math.max(sstep(0.56, 0.62, n), lines * sstep(0.3, 0.5, n));
-    o[0] = 0.7 + (n - 0.5) * 0.4; o[1] = o[0]; o[2] = o[0]; o[3] = a;
-  }));
+/** 겨울 자작나무 잔가지 덩어리 (알파 = 덮임, 캔버스에 갈라지는 가지를 그린다) */
+export function twigTex(): THREE.CanvasTexture {
+  return cached('twigs', () => {
+    const S = 256;
+    const { c, g } = canvas(S, S);
+    g.clearRect(0, 0, S, S);
+    let k = 0;
+    const rnd = () => ih(k++, 7, 251);
+    g.lineCap = 'round';
+    const limb = (x: number, y: number, a: number, len: number, wdt: number, depth: number) => {
+      const x2 = x + Math.cos(a) * len, y2 = y + Math.sin(a) * len;
+      const l = 150 + rnd() * 70;
+      g.strokeStyle = `rgb(${l},${l * 0.9},${l * 0.88})`;
+      g.lineWidth = wdt;
+      g.beginPath(); g.moveTo(x, y); g.lineTo(x2, y2); g.stroke();
+      // 가장자리 넘어가면 반대편에도 (반복 텍스처)
+      for (const [ox, oy] of [[S, 0], [-S, 0], [0, S], [0, -S]]) {
+        if (Math.min(x, x2) + ox < S && Math.max(x, x2) + ox > 0 && Math.min(y, y2) + oy < S && Math.max(y, y2) + oy > 0 && (ox || oy)) {
+          g.beginPath(); g.moveTo(x + ox, y + oy); g.lineTo(x2 + ox, y2 + oy); g.stroke();
+        }
+      }
+      if (depth <= 0) return;
+      const n = 2 + Math.floor(rnd() * 2);
+      for (let i = 0; i < n; i++) limb(x2, y2, a + (rnd() - 0.5) * 1.4, len * (0.55 + rnd() * 0.2), Math.max(0.6, wdt * 0.62), depth - 1);
+    };
+    for (let i = 0; i < 26; i++) limb(rnd() * S, rnd() * S, -Math.PI / 2 + (rnd() - 0.5) * 1.6, 26 + rnd() * 22, 2.2, 4);
+    const t = canvasTex(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  });
 }
 
 // ───────────────────────── 캔버스 색 텍스처 ─────────────────────────

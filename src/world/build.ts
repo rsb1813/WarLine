@@ -48,7 +48,8 @@ const WIN: Record<string, Win> = {
 type Add = (kind: BoxKind, mat: Mat, x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, color: number, o?: BoxOpt) => void;
 interface Op { a: number; b: number; door: boolean; h0: number; h1: number }
 
-export function buildBuilding(w: World, p: BPlan, r: () => number): Building {
+/** ground: 지형 높이 (문 밖 계단 높이 맞춤용) */
+export function buildBuilding(w: World, p: BPlan, r: () => number, ground?: (x: number, z: number) => number): Building {
   const id = w.buildings.length;
   const B: Building = {
     id, x: (p.x0 + p.x1) / 2, z: (p.z0 + p.z1) / 2, w: p.x1 - p.x0, d: p.z1 - p.z0, y: p.by,
@@ -62,7 +63,7 @@ export function buildBuilding(w: World, p: BPlan, r: () => number): Building {
     B.boxes.push(bid);
     if ((kind === 'wall' || kind === 'window') && w.boxes[bid].destructible) B.wallCount++;
   };
-  if (p.style === 'tower') buildTower(p, add, r); else buildHouse(p, add, r);
+  if (p.style === 'tower') buildTower(p, add, r); else buildHouse(p, add, r, ground);
   B.wallsAlive = B.wallCount;
   return B;
 }
@@ -93,7 +94,7 @@ function stairsZ(add: Add, m: Mat, x0: number, x1: number, zStart: number, y0: n
   }
 }
 
-function buildHouse(p: BPlan, add: Add, r: () => number): void {
+function buildHouse(p: BPlan, add: Add, r: () => number, ground?: (x: number, z: number) => number): void {
   const { x0, z0, x1, z1, by, baseY, floors, floorH, mat } = p;
   const t = WALL_T[mat];
   const wh = p.style === 'warehouse';
@@ -127,24 +128,32 @@ function buildHouse(p: BPlan, add: Add, r: () => number): void {
 
   // 문 자리 (벽 좌표, 벽 시작점 기준 중심). 계단 쪽 서벽은 피한다
   const sideLen = (s: number): number => (s < 2 ? Wd : D - 2 * t);
-  const noDoor = (s: number): number[] | null => {
-    if (s !== 2) return null;
-    const st = stairAt(0);
-    if (st) return [st[1] - (z0 + t) - 0.6, st[3] - (z0 + t) + 0.6];
-    if (mz) return [mz.sz0 - (z0 + t) - 0.6, mz.sz1 - (z0 + t) + 0.6];
-    return null;
+  // 칸막이 위치 (x)
+  const partX: number[] = [];
+  if (!wh && !church && p.style !== 'shed') {
+    if (p.style === 'apartment') { partX.push(x0 + Wd / 3, x0 + (2 * Wd) / 3); }
+    else if (Wd >= (p.style === 'house' ? 9.5 : 12)) partX.push(x0 + Wd / 2);
+  }
+  /** 문을 내면 안 되는 구간 (벽 좌표): 서벽 계단 앞, 북·남벽 칸막이 끝 */
+  const noDoor = (s: number): number[][] => {
+    const out: number[][] = [];
+    if (s === 2) {
+      const st = stairAt(0);
+      if (st) out.push([st[1] - (z0 + t) - 0.6, st[3] - (z0 + t) + 0.6]);
+      else if (mz) out.push([mz.sz0 - (z0 + t) - 0.6, mz.sz1 - (z0 + t) + 0.6]);
+    }
+    if (s < 2) for (const xp of partX) out.push([xp - x0 - 0.7, xp - x0 + 0.7]);
+    return out;
   };
   const doorCenter = (s: number, dw: number): number => {
     const len = sideLen(s), clr = (s < 2 ? t : 0) + 0.25;
-    let c = len / 2;
-    const nd = noDoor(s);
-    if (nd && c + dw / 2 > nd[0] && c - dw / 2 < nd[1]) {
-      if (nd[1] + dw <= len - clr) c = nd[1] + dw / 2;
-      else if (nd[0] - dw >= clr) c = nd[0] - dw / 2;
-      else return -1;
-    }
-    if (c - dw / 2 < clr || c + dw / 2 > len - clr) return -1;
-    return c;
+    const zones = noDoor(s);
+    const okAt = (c: number): boolean => c - dw / 2 >= clr && c + dw / 2 <= len - clr && zones.every((z) => c + dw / 2 <= z[0] || c - dw / 2 >= z[1]);
+    const cands = [len / 2];
+    for (const z of zones) cands.push(z[1] + dw / 2, z[0] - dw / 2);
+    let best = -1;
+    for (const c of cands) if (okAt(c) && (best < 0 || Math.abs(c - len / 2) < Math.abs(best - len / 2))) best = c;
+    return best;
   };
   const bigW = (s: number): number => Math.min(4.6, sideLen(s) - 2);
   const doorSpec = new Map<number, { c: number; w: number; h: number }>();
@@ -209,12 +218,6 @@ function buildHouse(p: BPlan, add: Add, r: () => number): void {
     solid(cur, len);
   };
 
-  // 칸막이 위치 (x)
-  const partX: number[] = [];
-  if (!wh && !church && p.style !== 'shed') {
-    if (p.style === 'apartment') { partX.push(x0 + Wd / 3, x0 + (2 * Wd) / 3); }
-    else if (Wd >= (p.style === 'house' ? 9.5 : 12)) partX.push(x0 + Wd / 2);
-  }
   const trimC = p.trim;
 
   add('floor', fMat, x0, baseY, z0, x1, by, z1, fCol);
@@ -252,6 +255,25 @@ function buildHouse(p: BPlan, add: Add, r: () => number): void {
     // 옥상 기계실 상자 (엄폐물 겸)
     const cx = x0 + Wd * 0.55, cz = z1 - t - 2.4;
     add('roof', 'metal', cx, yR, cz, cx + 2.2, yR + 1.3, cz + 1.6, 0x6d7174);
+  }
+  // 문 밖 디딤 계단: 바깥 땅이 1층 바닥보다 0.35 m 넘게 낮으면
+  if (ground) {
+    for (const [s, ds] of doorSpec) {
+      const ox = s === 2 ? -1 : s === 3 ? 1 : 0, oz = s === 0 ? -1 : s === 1 ? 1 : 0;
+      const cx = s < 2 ? x0 + ds.c : s === 2 ? x0 : x1;
+      const cz = s < 2 ? (s === 0 ? z0 : z1) : z0 + t + ds.c;
+      const g = Math.min(ground(cx + ox * 1.2, cz + oz * 1.2), ground(cx + ox * 0.4, cz + oz * 0.4));
+      const drop = by - g;
+      if (drop <= 0.35) continue;
+      const n = Math.min(8, Math.ceil(drop / 0.3) - 1), hw = ds.w / 2 + 0.25, dep = 0.4;
+      for (let k = 1; k <= n; k++) {
+        const top = by - (k * drop) / (n + 1);
+        const a = (k - 1) * dep, b = k * dep;
+        const bot = Math.min(g, ground(cx + ox * b, cz + oz * b)) - 0.3;
+        if (s < 2) add('stair', fMat, cx - hw, bot, oz < 0 ? cz - b : cz + a, cx + hw, top, oz < 0 ? cz - a : cz + b, sCol);
+        else add('stair', fMat, ox < 0 ? cx - b : cx + a, bot, cz - hw, ox < 0 ? cx - a : cx + b, top, cz + hw, sCol);
+      }
+    }
   }
   if (mz) {
     add('floor', 'concrete', x0 + t, by + hm - ST, mz.z0, x1 - t, by + hm, mz.z1, fCol);

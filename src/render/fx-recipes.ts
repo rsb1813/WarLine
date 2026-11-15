@@ -395,7 +395,7 @@ export function explosion(fx: FxCtx, p: Vec3, r: number, kind: ExpKind): void {
   const snowGround = !water && !!hit && (hit.mat === 'snow' || (hit.box < 0 && gt === 0));
 
   // 빛 (거리 상관없이: 먼 섬광도 보인다)
-  fx.lights.flash(x, y + 0.6 + vr * 0.25, z, 0xffb070, 70 * vr * vr, vr * 9, kind === 'vehicle' ? 0.6 : 0.34, 2);
+  fx.lights.flash(x, y + 0.6 + vr * 0.25, z, 0xffb070, 45 * vr * vr, vr * 9, kind === 'vehicle' ? 0.6 : 0.34, 2);
 
   const lod = lodOf(fx, p, true);
   if (lod <= 0) return;

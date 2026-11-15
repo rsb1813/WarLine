@@ -1,4 +1,5 @@
 // 로드아웃 수치 막대: 모든 무기 기본 구성 기준으로 정규화. 막대는 길수록 좋게 그린다.
+// 피해·사거리·탄창은 저격총·기관총이 막대를 독차지하지 않도록 제곱근 눈금.
 import type { FireMode, WeaponStats } from '../types';
 import { PRIMARY_IDS, SECONDARY_IDS, computeStats, defaultAttachments } from '../defs';
 import { esc } from './menu-util';
@@ -10,9 +11,9 @@ const n = (x: number) => (Number.isFinite(x) ? x : 0);
 const dmgTxt = (d: number, s: WeaponStats) => (pel(s) > 1 ? `${Math.round(d)}×${pel(s)}` : `${Math.round(d * 10) / 10}`);
 
 export const DETAIL_ROWS: StatRow[] = [
-  { k: 'dn', label: '근거리 피해', v: (s) => n(s.dmgNear) * Math.sqrt(pel(s)), fmt: (s) => dmgTxt(s.dmgNear, s) },
-  { k: 'df', label: '원거리 피해', v: (s) => n(s.dmgFar) * Math.sqrt(pel(s)), fmt: (s) => dmgTxt(s.dmgFar, s) },
-  { k: 'rg', label: '사거리', v: (s) => (n(s.rangeNear) + n(s.rangeFar)) / 2, fmt: (s) => `${Math.round(s.rangeNear)}–${Math.round(s.rangeFar)}m` },
+  { k: 'dn', label: '근거리 피해', v: (s) => Math.sqrt(n(s.dmgNear) * Math.sqrt(pel(s))), fmt: (s) => dmgTxt(s.dmgNear, s) },
+  { k: 'df', label: '원거리 피해', v: (s) => Math.sqrt(n(s.dmgFar) * Math.sqrt(pel(s))), fmt: (s) => dmgTxt(s.dmgFar, s) },
+  { k: 'rg', label: '사거리', v: (s) => Math.sqrt((n(s.rangeNear) + n(s.rangeFar)) / 2), fmt: (s) => `${Math.round(s.rangeNear)}–${Math.round(s.rangeFar)}m` },
   { k: 'rpm', label: '연사 속도', v: (s) => n(s.rpm), fmt: (s) => `${Math.round(s.rpm)}발/분` },
   { k: 'vel', label: '탄속', v: (s) => n(s.velocity), fmt: (s) => `${Math.round(s.velocity)}m/s` },
   { k: 'rv', label: '수직 반동 제어', v: (s) => 1 / (n(s.recoilV) + 0.05), fmt: (s) => `${s.recoilV.toFixed(2)}°` },
@@ -22,17 +23,17 @@ export const DETAIL_ROWS: StatRow[] = [
   { k: 'aim', label: '정조준 정확도', v: (s) => 1 / (n(s.adsSpread) + 0.08), fmt: (s) => `${s.adsSpread.toFixed(2)}°` },
   { k: 'mob', label: '기동성', v: (s) => n(s.moveMul), fmt: (s) => `${Math.round(s.moveMul * 100)}%` },
   { k: 'rl', label: '재장전 속도', v: (s) => 1 / Math.max(0.2, n(s.reload)), fmt: (s) => `${s.reload.toFixed(1)}초` },
-  { k: 'mag', label: '탄창', v: (s) => n(s.mag), fmt: (s) => `${Math.round(s.mag)}발` },
+  { k: 'mag', label: '탄창', v: (s) => Math.sqrt(n(s.mag)), fmt: (s) => `${Math.round(s.mag)}발` },
 ];
 
 export const MINI_ROWS: StatRow[] = [
-  { k: 'm-pow', label: '위력', v: (s) => (n(s.dmgNear) * 0.6 + n(s.dmgFar) * 0.4) * Math.sqrt(pel(s)), fmt: () => '' },
+  { k: 'm-pow', label: '위력', v: (s) => Math.sqrt((n(s.dmgNear) * 0.6 + n(s.dmgFar) * 0.4) * Math.sqrt(pel(s))), fmt: () => '' },
   { k: 'm-rof', label: '연사', v: (s) => n(s.rpm), fmt: () => '' },
-  { k: 'm-rng', label: '사거리', v: (s) => (n(s.rangeNear) + n(s.rangeFar)) / 2, fmt: () => '' },
+  { k: 'm-rng', label: '사거리', v: (s) => Math.sqrt((n(s.rangeNear) + n(s.rangeFar)) / 2), fmt: () => '' },
   { k: 'm-ads', label: '조준 속도', v: (s) => 1 / Math.max(0.05, n(s.adsTime)), fmt: () => '' },
   { k: 'm-rec', label: '반동 제어', v: (s) => 1 / (n(s.recoilV) + n(s.recoilH) * 0.6 + 0.05), fmt: () => '' },
   { k: 'm-mob', label: '기동성', v: (s) => n(s.moveMul), fmt: () => '' },
-  { k: 'm-mag', label: '탄창', v: (s) => n(s.mag), fmt: () => '' },
+  { k: 'm-mag', label: '탄창', v: (s) => Math.sqrt(n(s.mag)), fmt: () => '' },
 ];
 
 let ranges: Map<string, { lo: number; hi: number }> | null = null;

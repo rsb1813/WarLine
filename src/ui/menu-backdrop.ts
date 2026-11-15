@@ -7,7 +7,7 @@ import { reducedMotion } from './menu-util';
 interface Flake { x: number; y: number; z: number; ph: number }
 interface Flare { x: number; y: number; vx: number; t: number; life: number; trail: { x: number; y: number }[]; hue: number }
 interface Flash { x: number; t: number; life: number; r: number }
-interface Ridge { img: HTMLCanvasElement; depth: number; y0: number }
+interface Ridge { img: HTMLCanvasElement; depth: number; y0: number; top: number; cw: number }
 
 export class Backdrop {
   private ctx: CanvasRenderingContext2D;
@@ -95,10 +95,6 @@ export class Backdrop {
     ];
     this.ridges = layers.map((L, i) => {
       const cw = w + pad * 2;
-      const c = document.createElement('canvas');
-      c.width = Math.round(cw * dpr); c.height = Math.round(h * dpr);
-      const g = c.getContext('2d') as CanvasRenderingContext2D;
-      g.scale(dpr, dpr);
       const n = fbm(L.seed, 5);
       const ys: number[] = [];
       const step = 4;
@@ -109,6 +105,15 @@ export class Backdrop {
         const crag = Math.abs(n(u * L.freq * 4.3, 9 + i) - 0.5) * 0.35;
         ys.push(L.y - (v + crag) * L.amp);
       }
+      // 능선 위쪽 빈 하늘은 그림에 넣지 않는다 (매 프레임 칠하는 넓이를 줄임)
+      let minY = h;
+      for (const y of ys) if (y < minY) minY = y;
+      const top = Math.max(0, Math.floor(minY - (i === 3 ? h * 0.18 + 12 : 52)));
+      const c = document.createElement('canvas');
+      c.width = Math.round(cw * dpr); c.height = Math.max(1, Math.round((h + 12 - top) * dpr));
+      const g = c.getContext('2d') as CanvasRenderingContext2D;
+      g.scale(dpr, dpr);
+      g.translate(0, -top);
       // 몸통
       const body = g.createLinearGradient(0, L.y - L.amp * 1.4, 0, h);
       const [cr, cg, cb] = L.col;
@@ -116,9 +121,9 @@ export class Backdrop {
       body.addColorStop(1, `rgb(${Math.max(0, cr - 6)},${Math.max(0, cg - 6)},${Math.max(0, cb - 6)})`);
       g.fillStyle = body;
       g.beginPath();
-      g.moveTo(0, h);
+      g.moveTo(0, h + 12);
       ys.forEach((y, k) => g.lineTo(k * step, y));
-      g.lineTo(cw, h);
+      g.lineTo(cw, h + 12);
       g.closePath();
       g.fill();
       // 눈 덮인 마루: 경사가 빛 쪽(왼쪽)을 보면 밝게
@@ -168,17 +173,17 @@ export class Backdrop {
       if (i === 3) {
         const mx = cw * 0.78;
         const k = Math.round(mx / step);
-        const top = ys[k] - h * 0.16;
+        const mt = ys[k] - h * 0.16;
         g.strokeStyle = 'rgb(6,8,11)';
         g.lineWidth = 2;
         g.beginPath();
-        g.moveTo(mx, ys[k] + 4); g.lineTo(mx, top);
-        g.moveTo(mx - 14, ys[k] + 4); g.lineTo(mx, top + 20); g.lineTo(mx + 14, ys[k] + 4);
-        for (let q = 1; q < 6; q++) { const yy = top + (ys[k] - top) * (q / 6); const ww = 2 + q * 2.2; g.moveTo(mx - ww, yy); g.lineTo(mx + ww, yy); }
+        g.moveTo(mx, ys[k] + 4); g.lineTo(mx, mt);
+        g.moveTo(mx - 14, ys[k] + 4); g.lineTo(mx, mt + 20); g.lineTo(mx + 14, ys[k] + 4);
+        for (let q = 1; q < 6; q++) { const yy = mt + (ys[k] - mt) * (q / 6); const ww = 2 + q * 2.2; g.moveTo(mx - ww, yy); g.lineTo(mx + ww, yy); }
         g.stroke();
-        this.mast = { x: mx, y: top };
+        this.mast = { x: mx, y: mt };
       }
-      return { img: c, depth: 0.25 + i * 0.25, y0: L.y };
+      return { img: c, depth: 0.25 + i * 0.25, y0: L.y, top, cw };
     });
     // 탐조등 받침 (가운데 능선 뒤)
     const b1 = layers[1].y + h * 0.02;
@@ -387,13 +392,13 @@ export class Backdrop {
     const R = this.ridges[i];
     if (!R) return { x: 0, y: 0 };
     const drift = Math.sin(this.time * 0.025 + i) * 22 * R.depth;
-    return { x: -90 + drift - this.px * 26 * R.depth, y: -this.py * 8 * R.depth };
+    return { x: -90 + drift - this.px * 26 * R.depth, y: Math.max(-10, -this.py * 8 * R.depth) };
   }
 
   private drawRidge(i: number): void {
     const R = this.ridges[i];
     if (!R) return;
     const o = this.ridgeOffset(i);
-    this.ctx.drawImage(R.img, o.x, o.y, R.img.width / this.dpr, R.img.height / this.dpr);
+    this.ctx.drawImage(R.img, o.x, R.top + o.y, R.cw, this.h + 12 - R.top);
   }
 }

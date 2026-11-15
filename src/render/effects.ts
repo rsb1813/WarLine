@@ -436,7 +436,7 @@ export class Effects {
     if (this.fireD > 70 || this.lights.size < 2 || this.fireLightT > 0) return;
     this.fireLightT = 0.09;
     const p = this.fireP;
-    this.lights.flash(p.x + rr(-0.3, 0.3), p.y + rr(0, 0.4), p.z + rr(-0.3, 0.3), 0xff8a3a, (45 + 30 * Math.random()) * this.fireI, 16, 0.16, 0.5);
+    this.lights.flash(p.x + rr(-0.3, 0.3), p.y + rr(0, 0.4), p.z + rr(-0.3, 0.3), 0xff8a3a, (30 + 22 * Math.random()) * this.fireI, 16, 0.16, 0.5);
   }
 
   /** 로켓·미사일·유탄 연기 꼬리와 배기 불빛, 포탄 빛 */
