@@ -29,9 +29,9 @@ export const MAPS: MapDef[] = [
 ];
 
 export const SIZES: Record<SizeId, SizeDef> = {
-  small: { id: 'small', name: '16 대 16', perTeam: 16, tickets: 250, flags: 3, vehicles: ['mbt', 'ltv'] },
-  medium: { id: 'medium', name: '32 대 32', perTeam: 32, tickets: 400, flags: 5, vehicles: ['mbt', 'ifv', 'ltv', 'ltv', 'heli'] },
-  large: { id: 'large', name: '64 대 64', perTeam: 64, tickets: 650, flags: 7, vehicles: ['mbt', 'mbt', 'ifv', 'ifv', 'ltv', 'ltv', 'heli', 'heli'] },
+  small: { id: 'small', name: '16 대 16', perTeam: 16, tickets: 200, flags: 3, vehicles: ['mbt', 'ltv'] },
+  medium: { id: 'medium', name: '32 대 32', perTeam: 32, tickets: 240, flags: 5, vehicles: ['mbt', 'ifv', 'ltv', 'ltv', 'heli'] },
+  large: { id: 'large', name: '64 대 64', perTeam: 64, tickets: 420, flags: 7, vehicles: ['mbt', 'mbt', 'ifv', 'ifv', 'ltv', 'ltv', 'heli', 'heli'] },
 };
 
 /** aimErr 는 도 단위 (ai 가 DEG 를 곱해 쓴다). react 는 s */

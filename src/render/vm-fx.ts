@@ -70,7 +70,7 @@ export class MuzzleFlash {
       this.matS.opacity = k * 0.9;
       this.sideA.visible = this.sideB.visible = this.sideOn;
     }
-    const li = Math.max(this.peak * Math.exp(-this.lightT * 55), this.glowI);
+    const li = Math.max(this.peak * Math.exp(-Math.max(0, this.lightT - 0.012) * 34), this.glowI);
     this.light.intensity = li < 0.01 ? 0 : li;
     this.glowI = 0;
   }

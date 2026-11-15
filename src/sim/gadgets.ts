@@ -236,8 +236,7 @@ export function updateGadgets(g: Game, s: Soldier, dt: number): void {
   const ex = sext(s);
   for (const gs of s.gadgets) if (gs.cd > 0) gs.cd = Math.max(0, gs.cd - dt);
   if (s.anim.throwT > 0) s.anim.throwT = Math.max(0, s.anim.throwT - dt);
-  if (s.stimT > 0) s.stimT = Math.max(0, s.stimT - dt);
-  if (s.blindT > 0) s.blindT = Math.max(0, s.blindT - dt);
+  // stimT, blindT 는 sim/game.ts 가 줄인다 (여기서 또 줄이면 두 배로 빨리 끝남)
   if (ex.draw > 0) ex.draw = Math.max(0, ex.draw - dt);
 
   let torch: GadgetState | null = null;

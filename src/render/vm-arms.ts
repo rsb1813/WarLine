@@ -31,6 +31,13 @@ export function poseVec(name: string, out: number[] = []): number[] {
   return out;
 }
 export const POSE_LEN = 17;
+const poseCache = new Map<string, number[]>();
+/** cached (read-only) pose vector */
+export function poseOf(name: string): number[] {
+  let v = poseCache.get(name);
+  if (!v) { v = poseVec(name); poseCache.set(name, v); }
+  return v;
+}
 
 const FX = [-0.0292, -0.0097, 0.0097, 0.0292];
 const FLEN: [number, number, number][] = [[0.044, 0.027, 0.022], [0.048, 0.03, 0.023], [0.045, 0.028, 0.022], [0.036, 0.022, 0.019]];

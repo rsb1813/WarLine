@@ -6,7 +6,7 @@ import { FACTIONS } from '../defs';
 import { buildGunModel, buildGadgetModel } from './gunmodel';
 import { disposeModel } from './vm-geo';
 import { handAnchor } from './vm-gunparts';
-import { Arm, Hand, handQuat, poseVec, POSE_LEN } from './vm-arms';
+import { Arm, Hand, handQuat, poseOf, POSE_LEN } from './vm-arms';
 import { Casings, MuzzleFlash, Sparks } from './vm-fx';
 import * as M from './vm-mats';
 
@@ -35,7 +35,7 @@ const HOLDS: Record<string, HoldDef> = {
   tool: { hip: [0.1, -0.15, -0.27], hipR: [0.05, 0.08, -0.04], spr: [-0.03, -0.05, 0.03], sprR: [-0.4, 0.4, 0.3], rel: [0, 0, 0], relR: [0, 0, 0], ads: false, pivot: [0, 0.05, 0.08] },
   item: { hip: [0.03, -0.21, -0.4], hipR: [0.32, -0.08, 0.02], spr: [-0.02, -0.06, 0.03], sprR: [-0.3, 0.2, 0.1], rel: [0, 0, 0], relR: [0, 0, 0], ads: false, pivot: [0, 0, 0] },
   item1: { hip: [0.1, -0.15, -0.34], hipR: [0.15, -0.1, -0.15], spr: [-0.02, -0.06, 0.03], sprR: [-0.3, 0.2, 0.1], rel: [0, 0, 0], relR: [0, 0, 0], ads: false, pivot: [0, 0, 0] },
-  pen: { hip: [0.085, -0.125, -0.3], hipR: [0.12, 0.35, 0.25], spr: [-0.02, -0.05, 0.03], sprR: [-0.3, 0.2, 0.1], rel: [0, 0, 0], relR: [0, 0, 0], ads: false, pivot: [0, 0, 0] },
+  pen: { hip: [0.06, -0.1, -0.3], hipR: [0.12, 0.35, 0.25], spr: [-0.02, -0.05, 0.03], sprR: [-0.3, 0.2, 0.1], rel: [0, 0, 0], relR: [0, 0, 0], ads: false, pivot: [0, 0, 0] },
   paddles: { hip: [0, -0.115, -0.34], hipR: [0.22, 0, 0], spr: [0, -0.06, 0.04], sprR: [-0.3, 0, 0], rel: [0, 0, 0], relR: [0, 0, 0], ads: false, pivot: [0, 0, 0] },
   throw: { hip: [0.1, -0.13, -0.3], hipR: [0.2, 0.1, 0.2], spr: [-0.02, -0.05, 0.03], sprR: [-0.3, 0.2, 0.1], rel: [0, 0, 0], relR: [0, 0, 0], ads: false, pivot: [0, 0, 0] },
 };
@@ -120,6 +120,8 @@ export class ViewModel {
   private useAnim: { t: number; kind: string } | null = null;
   private launcherLow = 0;
   private lastUses = -1;
+  private heldUses = -1;
+  private lastCd = [0, 0, 0];
   private pressT = 1;
   private throwModels = new Map<string, THREE.Group>();
   private hp = { pR: new THREE.Vector3(), qR: new THREE.Quaternion(), pL: new THREE.Vector3(), qL: new THREE.Quaternion(), tp: new THREE.Vector3(), tq: new THREE.Quaternion(), tgtL: new Array(POSE_LEN).fill(0) as number[], lp: new THREE.Vector3(), lq: new THREE.Quaternion() };
@@ -192,6 +194,22 @@ export class ViewModel {
     const alive = s.state === 'alive' && s.vehicle < 0;
     this.faction(g, s);
     this.scanEvents(g, s);
+    // gadget usage detection from state (the battle loop usually consumes events before we run)
+    let thrownId = this.evThrow;
+    for (let i = 0; i < 3; i++) {
+      const x = s.gadgets[i];
+      if (!x) continue;
+      if (x.cd > this.lastCd[i] + 0.1 && THROWN.has(x.kind) && !thrownId) thrownId = x.id;
+      this.lastCd[i] = x.cd;
+    }
+    this.evThrow = thrownId;
+    // a held gadget that was just used (placed / injected / launched): keep it on screen for its use animation
+    if (this.held?.gadget && !this.useAnim) {
+      const hid = this.held.ud.gadgetId as string, kind = this.held.ud.kind as string;
+      const x = s.gadgets.find(q => q && q.id === hid);
+      const used = (this.evGadget && this.evGadget === hid) || (!!x && this.heldUses >= 0 && x.uses < this.heldUses);
+      if (used && USE_ANIM.has(kind)) this.useAnim = { t: 0, kind };
+    }
 
     // ── held item & model swap
     const w = s.weapons[s.cur] as WeaponState | undefined;
@@ -204,6 +222,8 @@ export class ViewModel {
     const held = this.held;
     const ud = held?.ud ?? {};
     const isGun = !!held && !held.gadget;
+    if (held?.gadget) { const x = s.gadgets.find(q => q && q.id === ud.gadgetId); this.heldUses = x ? x.uses : -1; }
+    else this.heldUses = -1;
 
     // ── scope state
     const zoom = isGun && w ? (w.st?.zoom ?? ud.zoom ?? 1) : (ud.zoom ?? 1);
@@ -290,7 +310,7 @@ export class ViewModel {
       throwK = Math.sin(Math.PI * clamp(tp, 0, 1));
       if (tp >= 1) this.endThrow();
     }
-    if (gadgetFire && gs && USE_ANIM.has(gs.kind)) this.useAnim = { t: 0, kind: gs.kind };
+    if (gadgetFire && gs && USE_ANIM.has(gs.kind) && !this.useAnim) this.useAnim = { t: 0, kind: gs.kind };
     if (this.useAnim) { this.useAnim.t += dt; if (this.useAnim.t > 0.5) { this.useAnim = null; } }
     const useP = this.useAnim ? clamp(this.useAnim.t / 0.42, 0, 1) : 0;
     const useK = this.useAnim ? Math.sin(Math.PI * useP) : 0;
@@ -718,7 +738,7 @@ export class ViewModel {
     const [hr, hl] = this.hands;
     const { pR, qR, pL, qL, tp, tq, tgtL } = this.hp;
     const tgtR = this.tmpPose;
-    const blendPose = (dst: number[], name: string, k: number) => { const v = poseVec(name); for (let i = 0; i < POSE_LEN; i++) dst[i] += (v[i] - dst[i]) * k; };
+    const blendPose = (dst: number[], name: string, k: number) => { const v = poseOf(name); for (let i = 0; i < POSE_LEN; i++) dst[i] += (v[i] - dst[i]) * k; };
     const off = (left: boolean, p: THREE.Vector3, q: THREE.Quaternion) => {
       if (left) { p.set(-0.17, -0.42, -0.18); handQuat([0.3, 0.3, -0.9], [0.3, 0.9, 0.2], q); }
       else { p.set(0.19, -0.44, -0.12); handQuat([-0.3, 0.3, -0.9], [-0.3, 0.9, 0.2], q); }
@@ -868,7 +888,7 @@ export class ViewModel {
   }
 }
 
-function poseVecInto(dst: number[], name: string): void { poseVec(name, dst); }
+function poseVecInto(dst: number[], name: string): void { const v = poseOf(name); for (let i = 0; i < POSE_LEN; i++) dst[i] = v[i]; }
 
 /** quick-throw keyframes for the left hand in camera space (mirrored on x for the right hand) */
 const THROW_KEYS: { t: number; p: V3; f: V3; n: V3 }[] = [

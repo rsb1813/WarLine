@@ -263,7 +263,7 @@ function atmine(g: THREE.Group): void {
   sightAt(g, 0, 0.2, 0.2, 0.3);
   sideHands(g, R, 0.0, 0.03, 0.7);
   g.userData.hold = 'item';
-  g.userData.itemPos = [0.02, -0.22, -0.42];
+  g.userData.itemPos = [0.02, -0.17, -0.42];
 }
 
 function bag(g: THREE.Group, med: boolean): void {
@@ -285,7 +285,7 @@ function bag(g: THREE.Group, med: boolean): void {
   sightAt(g, 0, 0.2, 0.2, 0.3);
   sideHands(g, w / 2, -0.005, 0.02, 0.5);
   g.userData.hold = 'item';
-  g.userData.itemPos = [0.03, -0.21, -0.4];
+  g.userData.itemPos = [0.03, -0.155, -0.4];
 }
 
 function cover(g: THREE.Group): void {
@@ -302,7 +302,7 @@ function cover(g: THREE.Group): void {
   sightAt(g, 0, 0.3, 0.2, 0.3);
   sideHands(g, w / 2, 0.02, 0.0, 0.2);
   g.userData.hold = 'item';
-  g.userData.itemPos = [0.03, -0.3, -0.46];
+  g.userData.itemPos = [0.03, -0.235, -0.46];
 }
 
 function drone(g: THREE.Group): void {
@@ -333,7 +333,7 @@ function drone(g: THREE.Group): void {
   sightAt(g, 0, 0.2, 0.2, 0.3);
   sideHands(g, 0.045, -0.012, 0.0, 0.45);
   g.userData.hold = 'item';
-  g.userData.itemPos = [0.02, -0.17, -0.38];
+  g.userData.itemPos = [0.02, -0.14, -0.38];
 }
 
 function sensor(g: THREE.Group): void {
@@ -352,7 +352,7 @@ function sensor(g: THREE.Group): void {
   sightAt(g, 0, 0.2, 0.2, 0.3);
   hands(g, { pos: [0.039, -0.012, 0.012], f: [0, 0, -1], n: [-1, 0, 0], pose: 'vgrip' }, null);
   g.userData.hold = 'item1';
-  g.userData.itemPos = [0.1, -0.15, -0.34];
+  g.userData.itemPos = [0.09, -0.12, -0.34];
 }
 
 function beacon(g: THREE.Group): void {
@@ -373,7 +373,7 @@ function beacon(g: THREE.Group): void {
   sightAt(g, 0, 0.2, 0.2, 0.3);
   sideHands(g, 0.05, -0.02, 0.0, 0.35);
   g.userData.hold = 'item';
-  g.userData.itemPos = [0.03, -0.2, -0.38];
+  g.userData.itemPos = [0.03, -0.15, -0.38];
 }
 
 function claymore(g: THREE.Group): void {
@@ -398,7 +398,7 @@ function claymore(g: THREE.Group): void {
   sightAt(g, 0, 0.2, 0.2, 0.3);
   sideHands(g, 0.12, -0.01, 0.025, 0.4);
   g.userData.hold = 'item';
-  g.userData.itemPos = [0.02, -0.2, -0.38];
+  g.userData.itemPos = [0.02, -0.15, -0.38];
 }
 
 function breach(g: THREE.Group): void {
